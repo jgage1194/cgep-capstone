@@ -13,6 +13,15 @@ terraform {
     random  = { source = "hashicorp/random", version = "~> 3.6" }
     archive = { source = "hashicorp/archive", version = "~> 2.4" }
   }
+  # GRC baseline: Shared encrypted state with native S3 locking.
+  backend "s3" {
+    bucket       = "acme-health-intake-tfstate-acf20522"
+    key          = "capstone/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    kms_key_id   = "arn:aws:kms:us-east-1:154648811080:key/c13c8f33-21a3-4e54-8afc-099f882b1014"
+    use_lockfile = true
+  }
 }
 
 provider "aws" {
@@ -110,9 +119,12 @@ resource "aws_dynamodb_table" "intake" {
     name = "submission_id"
     type = "S"
   }
-
-  # No server_side_encryption block. Defaults to AWS-owned key.
-  # GAP-02: capstone learner expected to add this with a customer-owned key.
+  # GAP-02 (HIPAA 164.312(a)(2)(iv)): Configures the submissions table to use the 
+  # customer-managed submissions key.
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.submissions.arn
+  }
 }
 
 ######################################################################
@@ -167,7 +179,8 @@ resource "aws_iam_role_policy_attachment" "lambda_basic" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# GAP-07: deliberately broad permissions on the workload data stores.
+# GAP-07 (HIPAA 164.312(a)(1)): Restricts Lambda to creating intake
+# records and uploading attachments under the uploads/ prefix.
 resource "aws_iam_role_policy" "lambda_inline" {
   name = "intake-data-access"
   role = aws_iam_role.lambda.id
@@ -177,12 +190,12 @@ resource "aws_iam_role_policy" "lambda_inline" {
     Statement = [
       {
         Effect   = "Allow"
-        Action   = "dynamodb:*"
+        Action   = "dynamodb:PutItem"
         Resource = aws_dynamodb_table.intake.arn
       },
       {
         Effect   = "Allow"
-        Action   = "s3:*"
+        Action   = "s3:PutObject"
         Resource = ["${aws_s3_bucket.uploads.arn}", "${aws_s3_bucket.uploads.arn}/*"]
       }
     ]
@@ -198,6 +211,21 @@ resource "aws_lambda_function" "intake" {
   source_code_hash = data.archive_file.handler.output_base64sha256
   timeout          = 10
 
+  # GAP-06: Limits simultaneous intake executions to five
+  # to control scaling and pressure on downstream services.
+  # reserved_concurrent_executions = 5
+
+  # GAP-06: Enables X-Ray tracing for sampled Lambda invocations
+  # to support performance and failure investigation.
+  tracing_config {
+    mode = "Active"
+  }
+
+  # GAP-06: Sends discarded asynchronous events to the intake DLQ.
+  dead_letter_config {
+    target_arn = aws_sqs_queue.intake_dlq.arn
+  }
+
   environment {
     variables = {
       INTAKE_TABLE  = aws_dynamodb_table.intake.name
@@ -205,8 +233,23 @@ resource "aws_lambda_function" "intake" {
     }
   }
 
-  # GAP-05: no vpc_config block. Learner expected to add one referencing
-  # aws_subnet.private[*] and a hardened security group.
+  # GAP-05 (HIPAA 164.312(e)(1)): Connects Lambda to the existing
+  # VPC's private subnets using the restricted security group.
+  vpc_config {
+    subnet_ids         = aws_subnet.private[*].id
+    security_group_ids = [aws_security_group.lambda.id]
+  }
+
+  # GAP-05 (HIPAA 164.312(e)(1)): Creates VPC permissions and
+  # private-subnet routing before attaching Lambda.
+  depends_on = [
+    aws_iam_role_policy.lambda_vpc,
+    aws_route_table_association.private,
+    aws_vpc_endpoint.s3,
+    aws_vpc_endpoint.dynamodb,
+    aws_iam_role_policy.lambda_xray,
+    aws_iam_role_policy.lambda_dlq
+  ]
 }
 
 ######################################################################
@@ -237,7 +280,29 @@ resource "aws_apigatewayv2_stage" "default" {
   api_id      = aws_apigatewayv2_api.intake.id
   name        = "$default"
   auto_deploy = true
-  # GAP-08: no access_log_settings. Learner expected to wire CloudWatch logs.
+
+  # GAP-08 (HIPAA 164.312(b)): Records API request metadata
+  # without logging patient payloads.
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_access.arn
+
+    format = jsonencode({
+      requestId      = "$context.requestId"
+      requestTime    = "$context.requestTime"
+      httpMethod     = "$context.httpMethod"
+      routeKey       = "$context.routeKey"
+      status         = "$context.status"
+      responseLength = "$context.responseLength"
+      integrationId  = "$context.integration.requestId"
+    })
+  }
+
+  # GAP-08: Sets default route throttling targets to limit
+  # sustained request traffic and short bursts.
+  default_route_settings {
+    throttling_rate_limit  = 5
+    throttling_burst_limit = 10
+  }
 }
 
 resource "aws_lambda_permission" "apigw" {
