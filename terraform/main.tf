@@ -203,6 +203,7 @@ resource "aws_iam_role_policy" "lambda_inline" {
 }
 
 resource "aws_lambda_function" "intake" {
+  description = "Patient intake handler deployed through the CGE-P policy gate"
   function_name    = "${local.name_prefix}-handler-${local.suffix}"
   role             = aws_iam_role.lambda.arn
   handler          = "handler.handler"
