@@ -1,0 +1,366 @@
+name: grc-gate
+
+on:
+  # Run when a pull request targets main.
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  # Allow a manual run from the Actions page.  
+  workflow_dispatch:
+
+
+permissions:
+  # Allows GitHub to issue an OIDC token for AWS authentication.
+  id-token: write
+  # Allows checkout to read the repository
+  contents: read
+  # Allows the workflow to post or update policy results on pull requests
+  pull-requests: write
+
+env:
+  AWS_REGION: us-east-1
+  # The capstone's Terraform directory.
+  TF_WORKING_DIR: terraform
+  # Supply Terraform variables using the current repository's identity.
+  TF_VAR_github_org: ${{ github.repository_owner }}
+  TF_VAR_github_repo: ${{ github.event.repository.name }}
+
+# Let an active deployment finish before starting another run.
+concurrency:
+  group: grc-gate-${{ github.ref }}
+  cancel-in-progress: false
+
+
+jobs:
+  grc-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          # Main deployments use the deployment role; PRs use the gate role.
+          role-to-assume: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ROLE_ARN || vars.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION}}
+          role-session-name: grc-gate-${{ github.run_id }}
+
+      - name: Verify AWS identity
+        run: aws sts get-caller-identity          
+
+      - name: Setup terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.16.4
+          terraform_wrapper: false
+
+      - name: Install Conftest
+        run: |
+          curl -fsSL https://github.com/open-policy-agent/conftest/releases/download/v0.50.0/conftest_0.50.0_Linux_x86_64.tar.gz \
+            | tar -xz -C /usr/local/bin conftest
+      
+      # - name: Install tfsec
+      #   run: |
+      #    curl -fsSL https://github.com/aquasecurity/tfsec/releases/download/v1.28.14/tfsec-linux-amd64 \
+      #       -o /usr/local/bin/tfsec && chmod +x /usr/local/bin/tfsec
+      
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+        with:
+          cosign-release: 'v2.2.4'
+
+      - name: Run policy unit tests
+        id: policy_tests
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mkdir -p evidence/capstone
+
+          # Test the policies against our passing and failing fixtures.
+          conftest verify \
+            --policy policies \
+            --output json \
+            | tee evidence/capstone/policy-tests.json          
+
+      - name: Terraform plan
+        id: plan
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: |
+           set -euo pipefail
+           
+           # Connect to the shared S3 backend and install providers.
+           terraform init -input=false
+           
+           # Check the Terraform configuration.
+           terraform validate
+           
+           # Save the proposed changes and readable output.
+           terraform plan \
+            -input=false \
+            -lock-timeout=60s \
+            -no-color \
+            -out=tfplan | tee plan.txt
+           
+           # Export the saved plan for Conftest.
+           terraform show -json tfplan > plan.json
+
+      - name: Conftest policy gate
+        id: conftest
+        run: |
+          mkdir -p evidence/capstone
+          EXIT=0
+          {
+            echo "["
+            FIRST=1
+            # Evaluate only the capstone policy namespaces.
+            for ns in \
+              compliance.s3_versioning \
+              compliance.s3_secure_transport \
+              compliance.s3_encryption \
+              compliance.dynamodb_encryption \
+              compliance.lambda_vpc \
+              compliance.lambda_resilience \
+              compliance.iam_least_privilege \
+              compliance.api_protection ; do
+              [[ $FIRST -eq 1 ]] && FIRST=0 || printf ","
+              set +e
+              OUT=$(conftest test --policy policies --namespace "$ns" --output=json "$TF_WORKING_DIR/plan.json")
+              STATUS=$?
+              set -e
+              [[ $STATUS -eq 0 ]] || EXIT=1
+              printf '%s' "$OUT"
+            done
+            echo
+            echo "]"
+          } > evidence/capstone/conftest-results.json
+          if [[ $EXIT -eq 0 ]]; then echo "conftest: PASS"; else echo "conftest: FAIL"; exit 1; fi
+      
+      # - name: tfsec scan
+      #   id: tfsec
+      #   if: always()
+      #   shell: bash
+      #   run: |
+      #     set -euo pipefail
+      #     mkdir -p evidence/capstone
+
+      #     # Save findings in SARIF, including findings below the gate threshold.
+      #     tfsec "$TF_WORKING_DIR" \
+      #       --format sarif \
+      #       --out evidence/capstone/tfsec.sarif || true
+
+      #     # Block the workflow on HIGH or CRITICAL findings.
+      #     tfsec "$TF_WORKING_DIR" --minimum-severity HIGH
+
+      - name: Terraform apply on main
+        id: apply
+        if: >-
+          success() &&
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main'
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Apply the exact saved plan that passed Conftest.
+          terraform apply \
+            -input=false \
+            -lock-timeout=60s \
+            -no-color \
+            tfplan | tee apply.txt
+
+      - name: Copy plan into evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence/capstone
+
+          # Preserve available outputs even if an earlier step failed.
+          for file in plan.json plan.txt apply.txt; do
+            if [[ -f "$TF_WORKING_DIR/$file" ]]; then
+              cp "$TF_WORKING_DIR/$file" "evidence/capstone/$file"
+            fi
+          done
+
+      - name: Bundle + Sign + Upload To Vault
+        id: sign
+        if: always()
+        env:
+          VAULT: ${{ vars.EVIDENCE_VAULT }}
+          RUN_ID: ${{ github.run_id }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if command -v sha256sum >/dev/null 2>&1; then SHASUM="sha256sum"
+          elif command -v shasum >/dev/null 2>&1; then SHASUM="shasum -a 256"
+          else echo "Need sha256sum or shasum" >&2; exit 2; fi
+
+          BUNDLE="evidence-${RUN_ID}-${SHA}.tar.gz"
+          ( cd evidence/capstone && tar czf "../../${BUNDLE}" . )
+          $SHASUM "${BUNDLE}" | awk '{print $1}' > "${BUNDLE}.sha256"
+
+          cosign sign-blob --yes --bundle "${BUNDLE}.sig.bundle" "${BUNDLE}"
+
+          KEY_PREFIX="runs/${RUN_ID}"
+          aws s3 cp "${BUNDLE}"            "s3://${VAULT}/${KEY_PREFIX}/${BUNDLE}"
+          aws s3 cp "${BUNDLE}.sha256"     "s3://${VAULT}/${KEY_PREFIX}/${BUNDLE}.sha256"
+          aws s3 cp "${BUNDLE}.sig.bundle" "s3://${VAULT}/${KEY_PREFIX}/${BUNDLE}.sig.bundle"
+
+          VERSION_ID=$(aws s3api head-object --bucket "${VAULT}" --key "${KEY_PREFIX}/${BUNDLE}" --query VersionId --output text)
+          cat > receipt.json <<EOF
+          {
+            "run_id":"${RUN_ID}",
+            "vault":"${VAULT}",
+            "bundle_key":"${KEY_PREFIX}/${BUNDLE}",
+            "version_id":"${VERSION_ID}",
+            "sha256":"$(cat ${BUNDLE}.sha256)",
+            "commit":"${SHA}"
+          }
+          EOF
+          aws s3 cp receipt.json "s3://${VAULT}/${KEY_PREFIX}/receipt.json"
+          cp receipt.json evidence/capstone/receipt.json  
+
+      - name: Upload evidence artifact
+        id: artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: grc-evidence-${{ github.run_id }}
+          path: |
+            evidence/capstone/
+            evidence-*.tar.gz
+            evidence-*.tar.gz.sha256
+            evidence-*.tar.gz.sig.bundle
+          retention-days: 90
+
+      - name: Post PR results
+        if: >-
+          always() &&
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/github-script@v7
+        env:
+          POLICY_TESTS: ${{ steps.policy_tests.outcome }}
+          PLAN: ${{ steps.plan.outcome }}
+          CONFTEST: ${{ steps.conftest.outcome }}
+          # TFSEC: ${{ steps.tfsec.outcome }}
+          SIGN: ${{ steps.sign.outcome }}
+          ARTIFACT: ${{ steps.artifact.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- capstone-grc-gate -->';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            // Read policy failures and warnings from the saved JSON report.
+            const findings = [];
+            const reportPath = 'evidence/capstone/conftest-results.json';
+
+            try {
+              const results = JSON.parse(fs.readFileSync(reportPath, 'utf8')).flat();
+
+              for (const result of results) {
+                for (const failure of result.failures || []) {
+                  findings.push(`- **FAIL:** ${failure.msg}`);
+                }
+                for (const warning of result.warnings || []) {
+                  findings.push(`- **WARNING:** ${warning.msg}`);
+                }
+              }
+            } catch {
+              findings.push('- Policy report unavailable; check the workflow logs.');
+            }
+
+            // Build a summary without including the Terraform plan contents.
+            const checks = [
+              ['Policy unit tests', process.env.POLICY_TESTS],
+              ['Terraform plan', process.env.PLAN],
+              ['Conftest gate', process.env.CONFTEST],
+            //['tfsec scan', process.env.TFSEC],
+              ['Sign and upload to vault', process.env.SIGN],
+              ['GitHub artifact', process.env.ARTIFACT],
+            ];
+
+            const body = [
+              marker,
+              '## Capstone GRC gate',
+              '',
+              '| Check | Result |',
+              '| --- | --- |',
+              ...checks.map(([name, outcome]) =>
+                `| ${name} | ${outcome || 'unavailable'} |`),
+              '',
+              '### Policy findings',
+              '',
+              ...(findings.length
+                ? findings.slice(0, 40)
+                : ['No policy failures or warnings reported.']),
+              '',
+              `[View workflow logs and evidence artifacts](${runUrl})`,
+              '',
+              'Documented warnings are advisory; required checks must pass.',
+            ].join('\n');
+
+            // Update our existing bot comment instead of posting duplicates.
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                ...context.repo,
+                issue_number: context.issue.number,
+                per_page: 100,
+              }
+            );
+
+            const existing = comments.find(comment =>
+              comment.user?.login === 'github-actions[bot]' &&
+              comment.body?.includes(marker)
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Enforce gate
+        if: always()
+        shell: bash
+        env:
+          POLICY_TESTS: ${{ steps.policy_tests.outcome }}
+          PLAN: ${{ steps.plan.outcome }}
+          CONFTEST: ${{ steps.conftest.outcome }}
+          # TFSEC: ${{ steps.tfsec.outcome }}
+          APPLY: ${{ steps.apply.outcome }}
+          REQUIRE_APPLY: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          SIGN: ${{ steps.sign.outcome }}
+          ARTIFACT: ${{ steps.artifact.outcome }}
+        run: |
+          set -euo pipefail
+
+          # Every required step must succeed.
+          # Failed, skipped, or missing outcomes fail this check.
+          test "$POLICY_TESTS" = "success"
+          test "$PLAN" = "success"
+          test "$CONFTEST" = "success"
+          # test "$TFSEC" = "success"
+          test "$SIGN" = "success"
+          test "$ARTIFACT" = "success"
+
+          # PR and manual runs skip deployment.
+          # Pushes to main must complete deployment successfully.
+          if [[ "$REQUIRE_APPLY" == "true" ]]; then
+            test "$APPLY" = "success"
+          fi          
+
+          echo "All required checks and evidence steps passed."
