@@ -65,6 +65,22 @@ resource "aws_iam_role_policy" "grc_gate_state" {
   })
 }
 
+# Allow the GRC pipeline to upload evidence under the runs/ prefix.
+resource "aws_iam_role_policy" "grc_gate_evidence" {
+  name = "capstone-evidence-upload"
+  role = aws_iam_role.grc_gate.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid      = "UploadRunEvidence"
+      Effect   = "Allow"
+      Action   = "s3:PutObject"
+      Resource = "${aws_s3_bucket.vault.arn}/runs/*"
+    }]
+  })
+}
+
 resource "aws_iam_role_policy_attachment" "readonly" {
   role       = aws_iam_role.grc_gate.name
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"

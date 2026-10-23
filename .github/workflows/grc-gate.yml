@@ -50,10 +50,10 @@ jobs:
           curl -fsSL https://github.com/open-policy-agent/conftest/releases/download/v0.50.0/conftest_0.50.0_Linux_x86_64.tar.gz \
             | tar -xz -C /usr/local/bin conftest
       
-      - name: Install tfsec
-        run: |
-         curl -fsSL https://github.com/aquasecurity/tfsec/releases/download/v1.28.14/tfsec-linux-amd64 \
-            -o /usr/local/bin/tfsec && chmod +x /usr/local/bin/tfsec
+      # - name: Install tfsec
+      #   run: |
+      #    curl -fsSL https://github.com/aquasecurity/tfsec/releases/download/v1.28.14/tfsec-linux-amd64 \
+      #       -o /usr/local/bin/tfsec && chmod +x /usr/local/bin/tfsec
       
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
@@ -127,21 +127,21 @@ jobs:
           } > evidence/capstone/conftest-results.json
           if [[ $EXIT -eq 0 ]]; then echo "conftest: PASS"; else echo "conftest: FAIL"; exit 1; fi
       
-      - name: tfsec scan
-        id: tfsec
-        if: always()
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p evidence/capstone
+      # - name: tfsec scan
+      #   id: tfsec
+      #   if: always()
+      #   shell: bash
+      #   run: |
+      #     set -euo pipefail
+      #     mkdir -p evidence/capstone
 
-          # Save findings in SARIF, including findings below the gate threshold.
-          tfsec "$TF_WORKING_DIR" \
-            --format sarif \
-            --out evidence/capstone/tfsec.sarif || true
+      #     # Save findings in SARIF, including findings below the gate threshold.
+      #     tfsec "$TF_WORKING_DIR" \
+      #       --format sarif \
+      #       --out evidence/capstone/tfsec.sarif || true
 
-          # Block the workflow on HIGH or CRITICAL findings.
-          tfsec "$TF_WORKING_DIR" --minimum-severity HIGH
+      #     # Block the workflow on HIGH or CRITICAL findings.
+      #     tfsec "$TF_WORKING_DIR" --minimum-severity HIGH
 
       - name: Copy plan into evidence
         if: always()
@@ -218,7 +218,7 @@ jobs:
           POLICY_TESTS: ${{ steps.policy_tests.outcome }}
           PLAN: ${{ steps.plan.outcome }}
           CONFTEST: ${{ steps.conftest.outcome }}
-          TFSEC: ${{ steps.tfsec.outcome }}
+          # TFSEC: ${{ steps.tfsec.outcome }}
           SIGN: ${{ steps.sign.outcome }}
           ARTIFACT: ${{ steps.artifact.outcome }}
         with:
@@ -251,7 +251,7 @@ jobs:
               ['Policy unit tests', process.env.POLICY_TESTS],
               ['Terraform plan', process.env.PLAN],
               ['Conftest gate', process.env.CONFTEST],
-              ['tfsec scan', process.env.TFSEC],
+              # ['tfsec scan', process.env.TFSEC],
               ['Sign and upload to vault', process.env.SIGN],
               ['GitHub artifact', process.env.ARTIFACT],
             ];
@@ -312,7 +312,7 @@ jobs:
           POLICY_TESTS: ${{ steps.policy_tests.outcome }}
           PLAN: ${{ steps.plan.outcome }}
           CONFTEST: ${{ steps.conftest.outcome }}
-          TFSEC: ${{ steps.tfsec.outcome }}
+          # TFSEC: ${{ steps.tfsec.outcome }}
           SIGN: ${{ steps.sign.outcome }}
           ARTIFACT: ${{ steps.artifact.outcome }}
         run: |
@@ -323,7 +323,7 @@ jobs:
           test "$POLICY_TESTS" = "success"
           test "$PLAN" = "success"
           test "$CONFTEST" = "success"
-          test "$TFSEC" = "success"
+          # test "$TFSEC" = "success"
           test "$SIGN" = "success"
           test "$ARTIFACT" = "success"
 

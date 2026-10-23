@@ -36,6 +36,10 @@ has_api_access_logging(stage) if {
 	group.type == "aws_cloudwatch_log_group"
 	group.change.after.arn == destination
 
+	# Reject missing or malformed JSON before attempting to decode it.
+	is_string(logging.format)
+	json.is_valid(logging.format)
+
 	format := json.unmarshal(logging.format)
 	is_object(format)
 
@@ -84,8 +88,8 @@ deny_api_throttling contains msg if {
 warn_api_waf_exception contains msg if {
 	some stage in managed_api_stages
 
-    msg := sprintf(
-	    "GAP-08 | HIPAA 164.312(b) (supporting safeguard) | OPEN EXCEPTION: WAF protection and associated request logging for %s are deferred. Verify traffic coverage, logging, and origin-bypass prevention before closing this exception.",
-	    [stage.address],
-    )
+	msg := sprintf(
+		"GAP-08 | HIPAA 164.312(b) (supporting safeguard) | OPEN EXCEPTION: WAF protection and associated request logging for %s are deferred. Verify traffic coverage, logging, and origin-bypass prevention before closing this exception.",
+		[stage.address],
+	)
 }
