@@ -251,7 +251,7 @@ jobs:
               ['Policy unit tests', process.env.POLICY_TESTS],
               ['Terraform plan', process.env.PLAN],
               ['Conftest gate', process.env.CONFTEST],
-              # ['tfsec scan', process.env.TFSEC],
+            //['tfsec scan', process.env.TFSEC],
               ['Sign and upload to vault', process.env.SIGN],
               ['GitHub artifact', process.env.ARTIFACT],
             ];
