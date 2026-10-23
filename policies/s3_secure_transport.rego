@@ -41,7 +41,12 @@ s3_bucket_requires_tls(bucket) if {
 	policy.type == "aws_s3_bucket_policy"
 	policy.change.after.bucket == bucket_name
 
+	# Validate the policy string before decoding it.
+	is_string(policy.change.after.policy)
+	json.is_valid(policy.change.after.policy)
+
 	document := json.unmarshal(policy.change.after.policy)
+
 	some statement in s3_tls_list(document.Statement)
 
 	statement.Effect == "Deny"

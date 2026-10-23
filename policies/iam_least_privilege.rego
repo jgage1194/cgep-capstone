@@ -73,6 +73,10 @@ iam_statement_supported(statement) if {
 # Decode the JSON string stored in Terraform's policy field.
 # Missing, unresolved, or unsupported documents fail this check.
 iam_document_supported(policy) if {
+	# Validate the policy string before decoding it.
+	is_string(policy.change.after.policy)
+	json.is_valid(policy.change.after.policy)
+
 	document := json.unmarshal(policy.change.after.policy)
 	is_object(document)
 
