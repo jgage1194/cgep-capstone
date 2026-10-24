@@ -8,7 +8,7 @@
       "oscal-version": "1.2.1",
       "links": [
         {
-          "href": "trestle://catalogs/hipaa/catalog.json",
+          "href": "hipaa-security-rule.json",
           "rel": "resolution-source"
         }
       ],
