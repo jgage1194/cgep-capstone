@@ -2,10 +2,13 @@
 # title: Require Lambda tracing and a dead-letter queue
 # description: Blocks missing tracing or DLQ configuration and warns about missing positive reserved concurrency.
 # custom:
+#   framework: HIPAA Security Rule
 #   frameworks:
+#     - "HIPAA Security Rule"
 #     - "SOC 2"
 #     - "CMMC Level 2"
 #   controls:
+#     - "164.308(a)(1)(ii)(D)"
 #     - "SOC 2 CC7.2"
 #     - "CMMC SI.L2-3.14.6"
 #   mapping_note: Supporting safeguards; these checks alone do not satisfy the mapped controls.
@@ -51,7 +54,7 @@ deny_lambda_tracing contains msg if {
 	not has_active_tracing(function)
 
 	msg := sprintf(
-		"GAP-06 | SOC 2 CC7.2 | CMMC SI.L2-3.14.6: %s must enable Active X-Ray tracing.",
+		"GAP-06 | HIPAA 164.308(a)(1)(ii)(D) (supporting safeguard): %s must enable Active X-Ray tracing.",
 		[function.address],
 	)
 }
@@ -62,7 +65,7 @@ deny_lambda_dlq contains msg if {
 	not has_dlq(function)
 
 	msg := sprintf(
-		"GAP-06 | SOC 2 CC7.2 | CMMC SI.L2-3.14.6: %s must configure an SQS dead-letter queue ARN.",
+		"GAP-06 | HIPAA 164.308(a)(1)(ii)(D) (supporting safeguard): %s must configure an SQS dead-letter queue ARN.",
 		[function.address],
 	)
 }
@@ -73,7 +76,7 @@ warn_lambda_concurrency contains msg if {
 	not has_positive_reserved_concurrency(function)
 
 	msg := sprintf(
-		"GAP-06 | SOC 2 CC7.2 | CMMC SI.L2-3.14.6 | OPEN EXCEPTION: %s has no positive reserved concurrency. Account quota increase pending; review this exception when approved.",
+		"GAP-06 | HIPAA 164.308(a)(1)(ii)(D) (supporting safeguard) | OPEN EXCEPTION: %s has no positive reserved concurrency. Account quota increase pending; review this exception when approved.",
 		[function.address],
 	)
 }

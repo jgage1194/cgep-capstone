@@ -41,8 +41,7 @@ test_invalid_tracing_fails if {
 
 		some msg in failures
 		contains(msg, "GAP-06")
-		contains(msg, "SOC 2 CC7.2")
-		contains(msg, "CMMC SI.L2-3.14.6")
+		contains(msg, "HIPAA 164.308(a)(1)(ii)(D) (supporting safeguard)")
 	}
 }
 
