@@ -1,0 +1,262 @@
+{
+  "component-definition": {
+    "uuid": "26185634-7df2-4cd8-a65d-dbdfe6a02860",
+    "metadata": {
+      "title": "Acme Health patient-intake capstone",
+      "last-modified": "2026-10-23T21:27:56.392632Z",
+      "version": "1.0.0",
+      "oscal-version": "1.1.3",
+      "props": [
+        {"name": "primary-framework", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "HIPAA Security Rule"}
+      ],
+      "links": [
+        {
+          "href": "https://doi.org/10.6028/NIST.SP.800-66r2",
+          "rel": "reference",
+          "text": "NIST SP 800-66 Rev. 2: HIPAA implementation guidance"
+        }
+      ],
+      "remarks": "All implementation entries reference HIPAA. NIST SP 800-53, SOC 2, and CMMC identifiers are project-authored supporting mappings, not equivalent requirements or additional implementation claims. Partial status indicates that the technical safeguards do not satisfy every organizational and operational obligation in the referenced HIPAA requirement."
+    },
+    "components": [
+      {
+        "uuid": "bd40a20c-f676-49dd-b2e3-cc1a27a2aa28",
+        "type": "service",
+        "title": "Governed Acme Health intake workload",
+        "description": "The starter AWS intake API, wrapped with a Terraform GRC baseline, Rego policies, and a GitHub Actions evidence pipeline.",
+        "purpose": "Document what the capstone implements, how it is checked, and where an assessor can find evidence.",
+        "control-implementations": [
+          {
+            "uuid": "5bf2493c-1a79-4733-a82d-c07a5384b6f9",
+            "source": "../catalogs/hipaa-security-rule.json",
+            "description": "HIPAA is the primary framework. Each entry describes supporting technical safeguards and records related NIST SP 800-53, SOC 2, and CMMC references as properties.",
+            "implemented-requirements": [
+              {
+                "uuid": "8fe76164-c581-4572-b2a6-6463df32c0f1",
+                "control-id": "hipaa-164.312-a-2-iv",
+                "description": "Uploads use SSE-KMS and DynamoDB uses a customer-managed KMS key. Rego checks explicit encryption and association with an enabled customer-managed key.",
+                "props": [
+                  {"name": "control-title", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "Encryption and decryption"},
+                  {"name": "hipaa-citation", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "45 CFR 164.312(a)(2)(iv)"},
+                  {"name": "nist-800-53-control", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "SC-28"},
+                  {"name": "implementation-status", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "partial"},
+                  {"name": "gap-id", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "GAP-01; GAP-02"},
+                  {"name": "terraform-resource", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "aws_s3_bucket_server_side_encryption_configuration.uploads; aws_dynamodb_table.intake; aws_kms_key.uploads; aws_kms_key.submissions"},
+                  {"name": "policy-file", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "policies/s3_encryption.rego; policies/dynamodb_encryption.rego"},
+                  {"name": "soc2-criterion", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "CC6.1"},
+                  {"name": "cmmc-practice", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "SC.L2-3.13.11"}
+                ],
+                "links": [
+                  {
+                    "rel": "evidence",
+                    "href": "s3://acme-health-intake-grc-evidence-vault-acf20522/runs/40017405490/evidence-40017405490-f90f4696bd395b34ccf1519ca556bf66dee171aa.tar.gz",
+                    "text": "Successful post-merge deployment evidence"
+                  },
+                  {
+                    "rel": "reference",
+                    "href": "https://github.com/jgage1194/cgep-capstone/actions/runs/40017405490",
+                    "text": "View successful deployment run"
+                  }
+                ],
+                "remarks": "KMS configuration alone does not establish FIPS validation for the CMMC cross-reference."
+              },
+              {
+                "uuid": "3f479ff0-9f78-4f60-aaf8-3f300278c8e6",
+                "control-id": "hipaa-164.312-e-1",
+                "description": "S3 bucket policies deny non-TLS requests. Lambda uses the workload VPC and S3/DynamoDB gateway endpoints; Rego checks TLS-deny policies and VPC association.",
+                "props": [
+                  {"name": "control-title", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "Transmission security"},
+                  {"name": "hipaa-citation", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "45 CFR 164.312(e)(1)"},
+                  {"name": "nist-800-53-control", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "SC-8; SC-7"},
+                  {"name": "implementation-status", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "partial"},
+                  {"name": "gap-id", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "GAP-03; GAP-05"},
+                  {"name": "terraform-resource", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "aws_s3_bucket_policy.uploads; aws_lambda_function.intake; aws_vpc_endpoint.s3; aws_vpc_endpoint.dynamodb"},
+                  {"name": "policy-file", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "policies/s3_secure_transport.rego; policies/lambda_vpc.rego"},
+                  {"name": "soc2-criterion", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "CC6.7; CC6.6"},
+                  {"name": "cmmc-practice", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "SC.L2-3.13.8; SC.L2-3.13.1"}
+                ],
+                "links": [
+                  {
+                    "rel": "evidence",
+                    "href": "s3://acme-health-intake-grc-evidence-vault-acf20522/runs/40017405490/evidence-40017405490-f90f4696bd395b34ccf1519ca556bf66dee171aa.tar.gz",
+                    "text": "Successful post-merge deployment evidence"
+                  },
+                  {
+                    "rel": "reference",
+                    "href": "https://github.com/jgage1194/cgep-capstone/actions/runs/40017405490",
+                    "text": "View successful deployment run"
+                  }
+                ],
+                "remarks": "VPC placement does not by itself establish encryption or full boundary protection."
+              },
+              {
+                "uuid": "79389de4-7e8a-41dc-b150-485a082440f1",
+                "control-id": "hipaa-164.308-a-7",
+                "description": "Managed S3 buckets have versioning enabled. The versioning policy rejects suspended or missing versioning, demonstrated by the failed test PR.",
+                "props": [
+                  {"name": "control-title", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "Contingency plan"},
+                  {"name": "hipaa-citation", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "45 CFR 164.308(a)(7)"},
+                  {"name": "nist-800-53-control", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "CP-9"},
+                  {"name": "implementation-status", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "partial"},
+                  {"name": "gap-id", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "GAP-04"},
+                  {"name": "terraform-resource", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "aws_s3_bucket_versioning.uploads"},
+                  {"name": "policy-file", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "policies/s3_versioning.rego"},
+                  {"name": "soc2-criterion", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "A1.2"},
+                  {"name": "cmmc-practice", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "MP.L2-3.8.9"}
+                ],
+                "links": [
+                  {
+                    "rel": "evidence",
+                    "href": "s3://acme-health-intake-grc-evidence-vault-acf20522/runs/40017405490/evidence-40017405490-f90f4696bd395b34ccf1519ca556bf66dee171aa.tar.gz",
+                    "text": "Successful post-merge deployment evidence"
+                  },
+                  {
+                    "rel": "reference",
+                    "href": "https://github.com/jgage1194/cgep-capstone/actions/runs/40017405490",
+                    "text": "View successful deployment run"
+                  },
+                  {
+                    "rel": "evidence",
+                    "href": "s3://acme-health-intake-grc-evidence-vault-acf20522/runs/40018585656/evidence-40018585656-3f791d624ab3590f99d87a275e3d37ffb79dd26c.tar.gz",
+                    "text": "Rejected S3 versioning proposal evidence"
+                  },
+                  {
+                    "rel": "reference",
+                    "href": "https://github.com/jgage1194/cgep-capstone/actions/runs/40018585656",
+                    "text": "View rejected versioning change"
+                  }
+                ],
+                "remarks": "Versioning supports contingency planning; independent backups, recovery procedures, and restore tests are outside this implementation."
+              },
+              {
+                "uuid": "2162f963-f8cf-486e-b28c-376ecb906850",
+                "control-id": "hipaa-164.312-a-1",
+                "description": "The Lambda execution role uses explicit data-access actions instead of s3:* and dynamodb:*. Rego rejects wildcard actions and undocumented grants on all resources in inline role policies.",
+                "props": [
+                  {"name": "control-title", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "Access control"},
+                  {"name": "hipaa-citation", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "45 CFR 164.312(a)(1)"},
+                  {"name": "nist-800-53-control", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "AC-6"},
+                  {"name": "implementation-status", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "partial"},
+                  {"name": "gap-id", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "GAP-07"},
+                  {"name": "terraform-resource", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "aws_iam_role_policy.lambda_inline; aws_iam_role.grc_gate; aws_iam_role.grc_deploy"},
+                  {"name": "policy-file", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "policies/iam_least_privilege.rego"},
+                  {"name": "soc2-criterion", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "CC6.3"},
+                  {"name": "cmmc-practice", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "AC.L2-3.1.5"}
+                ],
+                "links": [
+                  {
+                    "rel": "evidence",
+                    "href": "s3://acme-health-intake-grc-evidence-vault-acf20522/runs/40017405490/evidence-40017405490-f90f4696bd395b34ccf1519ca556bf66dee171aa.tar.gz",
+                    "text": "Successful post-merge deployment evidence"
+                  },
+                  {
+                    "rel": "reference",
+                    "href": "https://github.com/jgage1194/cgep-capstone/actions/runs/40017405490",
+                    "text": "View successful deployment run"
+                  }
+                ],
+                "remarks": "The policy checks aws_iam_role_policy resources, not every policy type or every principal's effective permissions."
+              },
+              {
+                "uuid": "fd538c07-1aa7-4f87-ac48-2fc1daf20901",
+                "control-id": "hipaa-164.312-b",
+                "description": "API Gateway writes request metadata to a CloudWatch log group with 30-day retention. CloudTrail is configured for multi-region management events and delivery to an encrypted, versioned bucket.",
+                "props": [
+                  {"name": "control-title", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "Audit controls"},
+                  {"name": "hipaa-citation", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "45 CFR 164.312(b)"},
+                  {"name": "nist-800-53-control", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "AU-12"},
+                  {"name": "implementation-status", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "partial"},
+                  {"name": "gap-id", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "GAP-08"},
+                  {"name": "terraform-resource", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "aws_apigatewayv2_stage.default; aws_cloudwatch_log_group.api_access; aws_cloudtrail.mgmt"},
+                  {"name": "policy-file", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "policies/api_protection.rego"},
+                  {"name": "soc2-criterion", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "CC7.2"},
+                  {"name": "cmmc-practice", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "AU.L2-3.3.1"}
+                ],
+                "links": [
+                  {
+                    "rel": "evidence",
+                    "href": "s3://acme-health-intake-grc-evidence-vault-acf20522/runs/40017405490/evidence-40017405490-f90f4696bd395b34ccf1519ca556bf66dee171aa.tar.gz",
+                    "text": "Successful post-merge deployment evidence"
+                  },
+                  {
+                    "rel": "reference",
+                    "href": "https://github.com/jgage1194/cgep-capstone/actions/runs/40017405490",
+                    "text": "View successful deployment run"
+                  }
+                ],
+                "remarks": "WAF is deferred. The API policy checks log configuration; CloudTrail delivery, log review, and alerting need separate assessment."
+              },
+              {
+                "uuid": "00de7cea-600f-4266-bee1-9815ec54dfbb",
+                "control-id": "hipaa-164.308-a-1-ii-d",
+                "description": "CloudTrail management-event logs and API access logs provide records that can support information-system activity review. X-Ray tracing and an asynchronous dead-letter queue provide additional operational visibility. Rego checks API log configuration, active tracing, and DLQ configuration.",
+                "props": [
+                  {"name": "control-title", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "Information system activity review"},
+                  {"name": "hipaa-citation", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "45 CFR 164.308(a)(1)(ii)(D)"},
+                  {"name": "nist-800-53-control", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "SI-4"},
+                  {"name": "implementation-status", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "partial"},
+                  {"name": "gap-id", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "GAP-06"},
+                  {"name": "soc2-criterion", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "CC7.2"},
+                  {"name": "cmmc-practice", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "SI.L2-3.14.6"},
+                  {"name": "policy-file", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "policies/api_protection.rego; policies/lambda_resilience.rego"},
+                  {"name": "terraform-resource", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "aws_cloudtrail.mgmt; aws_cloudwatch_log_group.api_access; aws_lambda_function.intake; aws_sqs_queue.intake_dlq"}
+                ],
+                "links": [
+                  {
+                    "rel": "evidence",
+                    "href": "s3://acme-health-intake-grc-evidence-vault-acf20522/runs/40017405490/evidence-40017405490-f90f4696bd395b34ccf1519ca556bf66dee171aa.tar.gz",
+                    "text": "Successful post-merge deployment evidence"
+                  },
+                  {
+                    "rel": "reference",
+                    "href": "https://github.com/jgage1194/cgep-capstone/actions/runs/40017405490",
+                    "text": "View successful deployment run"
+                  }
+                ],
+                "remarks": "Partial supporting implementation: regular security review procedures, review records, alerting, and attack detection have not been demonstrated. Tracing and a DLQ are not substitutes for security monitoring. Reserved concurrency remains deferred pending quota approval; the DLQ applies to asynchronous invocations."
+              },
+              {
+                "uuid": "e552d94a-1b4b-4953-94fd-27d44f5b83a5",
+                "control-id": "hipaa-164.308-a-1-ii-b",
+                "description": "Terraform safeguards and required Rego checks implement selected technical risk-reduction measures. GitHub branch rules prevent merging a failed policy check. After merge, the workflow checks a new saved plan before applying it and preserves signed evidence of the decision and deployment.",
+                "props": [
+                  {"name": "control-title", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "Risk management"},
+                  {"name": "hipaa-citation", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "45 CFR 164.308(a)(1)(ii)(B)"},
+                  {"name": "nist-800-53-control", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "CM-3"},
+                  {"name": "implementation-status", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "partial"},
+                  {"name": "terraform-resource", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "aws_iam_role.grc_gate; aws_iam_role.grc_deploy"},
+                  {"name": "soc2-criterion", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "CC8.1"},
+                  {"name": "cmmc-practice", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "CM.L2-3.4.3"}
+                ],
+                "links": [
+                  {
+                    "rel": "evidence",
+                    "href": "s3://acme-health-intake-grc-evidence-vault-acf20522/runs/40017405490/evidence-40017405490-f90f4696bd395b34ccf1519ca556bf66dee171aa.tar.gz",
+                    "text": "Successful post-merge deployment evidence"
+                  },
+                  {
+                    "rel": "reference",
+                    "href": "https://github.com/jgage1194/cgep-capstone/actions/runs/40017405490",
+                    "text": "View successful deployment run"
+                  },
+                  {
+                    "rel": "evidence",
+                    "href": "s3://acme-health-intake-grc-evidence-vault-acf20522/runs/40018585656/evidence-40018585656-3f791d624ab3590f99d87a275e3d37ffb79dd26c.tar.gz",
+                    "text": "Rejected S3 versioning proposal evidence"
+                  },
+                  {
+                    "rel": "reference",
+                    "href": "https://github.com/jgage1194/cgep-capstone/actions/runs/40018585656",
+                    "text": "View rejected versioning change"
+                  }
+                ],
+                "remarks": "CM-3 is a project-authored supporting mapping for the configuration-change safeguards; it is not a claim of equivalence with HIPAA risk management. Organization-wide risk analysis, risk treatment decisions, independent approval, and effectiveness review remain outside this demonstration. The deployment role currently supports existing Lambda updates and pipeline operations."
+              }
+            ]
+          }
+        ],
+        "remarks": "WAF and reserved concurrency remain deferred. Governance-mode Object Lock preserves evidence for 30 days but can be bypassed with the required permission. The verifier checks checksum, signature, and retention; signer identity, receipt object version, and current deployed state need separate review. Deployment permissions currently cover existing Lambda updates and pipeline state/evidence operations."
+      }
+    ]
+  }
+}

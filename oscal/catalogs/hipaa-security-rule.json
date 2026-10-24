@@ -1,0 +1,338 @@
+{
+  "catalog": {
+    "uuid": "1979243b-a15f-4c66-adca-3e2e3d623a1a",
+    "metadata": {
+      "title": "Acme Health capstone HIPAA Security Rule control subset",
+      "last-modified": "2026-10-23T21:41:11.579168Z",
+      "version": "1.1.0",
+      "oscal-version": "1.1.3",
+      "links": [
+        {
+          "href": "https://www.ecfr.gov/current/title-45/section-164.308",
+          "rel": "reference",
+          "text": "HIPAA Security Rule administrative safeguards"
+        },
+        {
+          "href": "https://www.ecfr.gov/current/title-45/section-164.312",
+          "rel": "reference",
+          "text": "HIPAA Security Rule technical safeguards"
+        },
+        {
+          "href": "https://doi.org/10.6028/NIST.SP.800-66r2",
+          "rel": "reference",
+          "text": "NIST SP 800-66 Rev. 2: HIPAA Security Rule implementation guidance"
+        }
+      ],
+      "remarks": "Project-authored OSCAL encoding of a selected HIPAA Security Rule subset, not an official or complete HIPAA OSCAL catalog. Regulatory statements were transcribed from 45 CFR 164.308 and 164.312 as displayed by eCFR on 2026-10-23 (title content shown current through 2026-10-21). The contingency-plan entry includes all five implementation specifications under the selected paragraph. Other entries contain the text of their exact cited paragraph. SP 800-66 Rev. 2 is implementation guidance. Project implementation claims and secondary framework mappings remain in the component definition."
+    },
+    "controls": [
+      {
+        "id": "hipaa-164.312-a-2-iv",
+        "title": "Encryption and decryption",
+        "props": [
+          {
+            "name": "label",
+            "value": "164.312(a)(2)(iv)"
+          },
+          {
+            "name": "citation",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "45 CFR 164.312(a)(2)(iv)"
+          },
+          {
+            "name": "requirement-type",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "Addressable implementation specification"
+          }
+        ],
+        "links": [
+          {
+            "href": "https://www.ecfr.gov/current/title-45/section-164.312#p-164.312(a)(2)(iv)",
+            "rel": "reference",
+            "text": "Source regulatory text (eCFR)"
+          }
+        ],
+        "parts": [
+          {
+            "id": "hipaa-164.312-a-2-iv-statement",
+            "name": "statement",
+            "prose": "Implement a mechanism to encrypt and decrypt electronic protected health information."
+          }
+        ]
+      },
+      {
+        "id": "hipaa-164.312-e-1",
+        "title": "Transmission security",
+        "props": [
+          {
+            "name": "label",
+            "value": "164.312(e)(1)"
+          },
+          {
+            "name": "citation",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "45 CFR 164.312(e)(1)"
+          },
+          {
+            "name": "requirement-type",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "Standard"
+          }
+        ],
+        "links": [
+          {
+            "href": "https://www.ecfr.gov/current/title-45/section-164.312#p-164.312(e)(1)",
+            "rel": "reference",
+            "text": "Source regulatory text (eCFR)"
+          }
+        ],
+        "parts": [
+          {
+            "id": "hipaa-164.312-e-1-statement",
+            "name": "statement",
+            "prose": "Implement technical security measures to guard against unauthorized access to electronic protected health information that is being transmitted over an electronic communications network."
+          }
+        ]
+      },
+      {
+        "id": "hipaa-164.308-a-7",
+        "title": "Contingency plan",
+        "props": [
+          {
+            "name": "label",
+            "value": "164.308(a)(7)"
+          },
+          {
+            "name": "citation",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "45 CFR 164.308(a)(7)"
+          },
+          {
+            "name": "requirement-type",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "Standard"
+          }
+        ],
+        "links": [
+          {
+            "href": "https://www.ecfr.gov/current/title-45/section-164.308#p-164.308(a)(7)",
+            "rel": "reference",
+            "text": "Source regulatory text (eCFR)"
+          }
+        ],
+        "parts": [
+          {
+            "id": "hipaa-164.308-a-7-statement",
+            "name": "statement",
+            "prose": "Establish (and implement as needed) policies and procedures for responding to an emergency or other occurrence (for example, fire, vandalism, system failure, and natural disaster) that damages systems that contain electronic protected health information.",
+            "parts": [
+              {
+                "id": "hipaa-164.308-a-7-specifications",
+                "name": "item",
+                "title": "Implementation specifications — 164.308(a)(7)(ii)",
+                "parts": [
+                  {
+                    "id": "hipaa-164.308-a-7-a",
+                    "name": "item",
+                    "title": "Data backup plan (Required)",
+                    "props": [
+                      {
+                        "name": "label",
+                        "value": "164.308(a)(7)(ii)(A)"
+                      }
+                    ],
+                    "prose": "Establish and implement procedures to create and maintain retrievable exact copies of electronic protected health information."
+                  },
+                  {
+                    "id": "hipaa-164.308-a-7-b",
+                    "name": "item",
+                    "title": "Disaster recovery plan (Required)",
+                    "props": [
+                      {
+                        "name": "label",
+                        "value": "164.308(a)(7)(ii)(B)"
+                      }
+                    ],
+                    "prose": "Establish (and implement as needed) procedures to restore any loss of data."
+                  },
+                  {
+                    "id": "hipaa-164.308-a-7-c",
+                    "name": "item",
+                    "title": "Emergency mode operation plan (Required)",
+                    "props": [
+                      {
+                        "name": "label",
+                        "value": "164.308(a)(7)(ii)(C)"
+                      }
+                    ],
+                    "prose": "Establish (and implement as needed) procedures to enable continuation of critical business processes for protection of the security of electronic protected health information while operating in emergency mode."
+                  },
+                  {
+                    "id": "hipaa-164.308-a-7-d",
+                    "name": "item",
+                    "title": "Testing and revision procedures (Addressable)",
+                    "props": [
+                      {
+                        "name": "label",
+                        "value": "164.308(a)(7)(ii)(D)"
+                      }
+                    ],
+                    "prose": "Implement procedures for periodic testing and revision of contingency plans."
+                  },
+                  {
+                    "id": "hipaa-164.308-a-7-e",
+                    "name": "item",
+                    "title": "Applications and data criticality analysis (Addressable)",
+                    "props": [
+                      {
+                        "name": "label",
+                        "value": "164.308(a)(7)(ii)(E)"
+                      }
+                    ],
+                    "prose": "Assess the relative criticality of specific applications and data in support of other contingency plan components."
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "id": "hipaa-164.312-a-1",
+        "title": "Access control",
+        "props": [
+          {
+            "name": "label",
+            "value": "164.312(a)(1)"
+          },
+          {
+            "name": "citation",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "45 CFR 164.312(a)(1)"
+          },
+          {
+            "name": "requirement-type",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "Standard"
+          }
+        ],
+        "links": [
+          {
+            "href": "https://www.ecfr.gov/current/title-45/section-164.312#p-164.312(a)(1)",
+            "rel": "reference",
+            "text": "Source regulatory text (eCFR)"
+          }
+        ],
+        "parts": [
+          {
+            "id": "hipaa-164.312-a-1-statement",
+            "name": "statement",
+            "prose": "Implement technical policies and procedures for electronic information systems that maintain electronic protected health information to allow access only to those persons or software programs that have been granted access rights as specified in § 164.308(a)(4)."
+          }
+        ]
+      },
+      {
+        "id": "hipaa-164.312-b",
+        "title": "Audit controls",
+        "props": [
+          {
+            "name": "label",
+            "value": "164.312(b)"
+          },
+          {
+            "name": "citation",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "45 CFR 164.312(b)"
+          },
+          {
+            "name": "requirement-type",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "Standard"
+          }
+        ],
+        "links": [
+          {
+            "href": "https://www.ecfr.gov/current/title-45/section-164.312#p-164.312(b)",
+            "rel": "reference",
+            "text": "Source regulatory text (eCFR)"
+          }
+        ],
+        "parts": [
+          {
+            "id": "hipaa-164.312-b-statement",
+            "name": "statement",
+            "prose": "Implement hardware, software, and/or procedural mechanisms that record and examine activity in information systems that contain or use electronic protected health information."
+          }
+        ]
+      },
+      {
+        "id": "hipaa-164.308-a-1-ii-d",
+        "title": "Information system activity review",
+        "props": [
+          {
+            "name": "label",
+            "value": "164.308(a)(1)(ii)(D)"
+          },
+          {
+            "name": "citation",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "45 CFR 164.308(a)(1)(ii)(D)"
+          },
+          {
+            "name": "requirement-type",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "Required implementation specification"
+          }
+        ],
+        "links": [
+          {
+            "href": "https://www.ecfr.gov/current/title-45/section-164.308#p-164.308(a)(1)(ii)(D)",
+            "rel": "reference",
+            "text": "Source regulatory text (eCFR)"
+          }
+        ],
+        "parts": [
+          {
+            "id": "hipaa-164.308-a-1-ii-d-statement",
+            "name": "statement",
+            "prose": "Implement procedures to regularly review records of information system activity, such as audit logs, access reports, and security incident tracking reports."
+          }
+        ]
+      },
+      {
+        "id": "hipaa-164.308-a-1-ii-b",
+        "title": "Risk management",
+        "props": [
+          {
+            "name": "label",
+            "value": "164.308(a)(1)(ii)(B)"
+          },
+          {
+            "name": "citation",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "45 CFR 164.308(a)(1)(ii)(B)"
+          },
+          {
+            "name": "requirement-type",
+            "ns": "https://github.com/jgage1194/cgep-capstone/ns",
+            "value": "Required implementation specification"
+          }
+        ],
+        "links": [
+          {
+            "href": "https://www.ecfr.gov/current/title-45/section-164.308#p-164.308(a)(1)(ii)(B)",
+            "rel": "reference",
+            "text": "Source regulatory text (eCFR)"
+          }
+        ],
+        "parts": [
+          {
+            "id": "hipaa-164.308-a-1-ii-b-statement",
+            "name": "statement",
+            "prose": "Implement security measures sufficient to reduce risks and vulnerabilities to a reasonable and appropriate level to comply with § 164.306(a)."
+          }
+        ]
+      }
+    ]
+  }
+}
