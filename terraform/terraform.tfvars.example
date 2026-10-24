@@ -1,0 +1,6 @@
+github_org = "<github-org>"
+github_repo = "<github-repo>"
+aws_region = "us-east-1"
+# Set true only if the account has no GitHub Actions OIDC provider.
+# If true, keep it true in future runs: Terraform owns the created provider.
+create_github_oidc_provider = false

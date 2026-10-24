@@ -1,9 +1,32 @@
-variable "github_org" { type = string }
-variable "github_repo" { type = string }
+variable "github_org" {
+  type        = string
+  description = "GitHub repository owner permitted to run the gate."
+}
+variable "github_repo" {
+  type        = string
+  description = "GitHub repository name permitted to run the gate."
+}
 
-# GRC baseline: Reuses the GitHub OIDC provider already in this account.
+variable "create_github_oidc_provider" {
+  type        = bool
+  default     = false
+  description = "Create the account-wide GitHub OIDC provider only when none exists."
+}
+
+# Preserve existing deployments by reusing the provider unless creation is requested.
 data "aws_iam_openid_connect_provider" "github" {
-  url = "https://token.actions.githubusercontent.com"
+  count = var.create_github_oidc_provider ? 0 : 1
+  url   = "https://token.actions.githubusercontent.com"
+}
+
+resource "aws_iam_openid_connect_provider" "github" {
+  count          = var.create_github_oidc_provider ? 1 : 0
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
+}
+
+locals {
+  github_oidc_arn = var.create_github_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : data.aws_iam_openid_connect_provider.github[0].arn
 }
 
 resource "aws_iam_role" "grc_gate" {
@@ -13,7 +36,7 @@ resource "aws_iam_role" "grc_gate" {
     Version = "2012-10-17"
     Statement = [{
       Effect    = "Allow"
-      Principal = { Federated = data.aws_iam_openid_connect_provider.github.arn }
+      Principal = { Federated = local.github_oidc_arn }
       Action    = "sts:AssumeRoleWithWebIdentity"
       Condition = {
         StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" }
@@ -97,7 +120,7 @@ resource "aws_iam_role" "grc_deploy" {
     Statement = [{
       Effect = "Allow"
       Principal = {
-        Federated = data.aws_iam_openid_connect_provider.github.arn
+        Federated = local.github_oidc_arn
       }
       Action = "sts:AssumeRoleWithWebIdentity"
       Condition = {

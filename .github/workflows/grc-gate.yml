@@ -25,6 +25,8 @@ env:
   # Supply Terraform variables using the current repository's identity.
   TF_VAR_github_org: ${{ github.repository_owner }}
   TF_VAR_github_repo: ${{ github.event.repository.name }}
+  # Set repository variable to true only when this stack created the provider.
+  TF_VAR_create_github_oidc_provider: ${{ vars.CREATE_GITHUB_OIDC_PROVIDER || 'false' }}
 
 # Let an active deployment finish before starting another run.
 concurrency:
@@ -84,6 +86,16 @@ jobs:
             --output json \
             | tee evidence/capstone/policy-tests.json          
 
+      # Repository variable: backend settings only, never AWS credentials.
+      - name: Configure Terraform backend
+        env:
+          TF_BACKEND_CONFIG: ${{ vars.TF_BACKEND_CONFIG }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$TF_BACKEND_CONFIG" || { echo "Set the TF_BACKEND_CONFIG repository variable." >&2; exit 1; }
+          printf '%s\n' "$TF_BACKEND_CONFIG" > "$TF_WORKING_DIR/backend.hcl"
+
       - name: Terraform plan
         id: plan
         working-directory: ${{ env.TF_WORKING_DIR }}
@@ -91,7 +103,7 @@ jobs:
            set -euo pipefail
            
            # Connect to the shared S3 backend and install providers.
-           terraform init -input=false
+           terraform init -input=false -backend-config=backend.hcl
            
            # Check the Terraform configuration.
            terraform validate

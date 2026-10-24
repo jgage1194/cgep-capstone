@@ -7,21 +7,14 @@
 ######################################################################
 
 terraform {
-  required_version = ">= 1.6"
+  required_version = ">= 1.10"
   required_providers {
     aws     = { source = "hashicorp/aws", version = "~> 5.0" }
     random  = { source = "hashicorp/random", version = "~> 3.6" }
     archive = { source = "hashicorp/archive", version = "~> 2.4" }
   }
   # GRC baseline: Shared encrypted state with native S3 locking.
-  backend "s3" {
-    bucket       = "acme-health-intake-tfstate-acf20522"
-    key          = "capstone/terraform.tfstate"
-    region       = "us-east-1"
-    encrypt      = true
-    kms_key_id   = "arn:aws:kms:us-east-1:154648811080:key/c13c8f33-21a3-4e54-8afc-099f882b1014"
-    use_lockfile = true
-  }
+  backend "s3" {}
 }
 
 provider "aws" {
@@ -203,7 +196,7 @@ resource "aws_iam_role_policy" "lambda_inline" {
 }
 
 resource "aws_lambda_function" "intake" {
-  description = "Patient intake handler deployed through the CGE-P policy gate"
+  description      = "Patient intake handler deployed through the CGE-P policy gate"
   function_name    = "${local.name_prefix}-handler-${local.suffix}"
   role             = aws_iam_role.lambda.arn
   handler          = "handler.handler"

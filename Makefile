@@ -9,10 +9,10 @@ AWS_PROFILE ?= default
 CREDS = eval "$$(aws configure export-credentials --profile $(AWS_PROFILE) --format env)"
 
 deploy: ## Deploy the starter (terraform init + apply)
-	@$(CREDS) && cd terraform && terraform init -input=false && terraform apply -auto-approve
+	@$(CREDS) && cd terraform && terraform init -input=false -backend-config=backend.hcl && terraform apply -auto-approve
 
 plan: ## Show what deploy would do
-	@$(CREDS) && cd terraform && terraform init -input=false && terraform plan
+	@$(CREDS) && cd terraform && terraform init -input=false -backend-config=backend.hcl && terraform plan
 
 test: ## Smoke test the deployed API
 	@$(CREDS) && cd terraform && API_URL=$$(terraform output -raw api_url) && \

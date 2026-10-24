@@ -15,3 +15,8 @@ terraform/lambda/handler.zip
 # Local
 evidence/
 .DS_Store
+
+# Account-specific backend setup and bootstrap files
+/terraform/backend.hcl
+/terraform/bootstrap_override.tf
+/terraform/bootstrap.tfplan
