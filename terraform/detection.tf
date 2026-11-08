@@ -9,12 +9,84 @@ locals {
     "PutBucketEncryption",
     "DeleteBucketEncryption",
   ]
+  control_alerts_topic_name = "${local.name_prefix}-control-alerts-${local.suffix}"
+}
+
+# alias/aws/sns is not writable and does not allow events.amazonaws.com to
+# call kms:GenerateDataKey or kms:Decrypt. EventBridge matches the rules and
+# then fails the publish. A customer-managed key is the key EventBridge can use.
+data "aws_iam_policy_document" "control_alerts_key" {
+  statement {
+    sid    = "EnableAccountAdministration"
+    effect = "Allow"
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+    actions   = ["kms:*"]
+    resources = ["*"]
+  }
+
+  statement {
+    sid    = "AllowEventBridgePublish"
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["events.amazonaws.com"]
+    }
+    actions = [
+      "kms:Decrypt",
+      "kms:GenerateDataKey*",
+    ]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+  }
+
+  statement {
+    sid    = "AllowSnsDelivery"
+    effect = "Allow"
+    principals {
+      type        = "Service"
+      identifiers = ["sns.amazonaws.com"]
+    }
+    actions = [
+      "kms:Decrypt",
+      "kms:GenerateDataKey*",
+    ]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+    condition {
+      test     = "ArnEquals"
+      variable = "aws:SourceArn"
+      values   = ["arn:aws:sns:${var.aws_region}:${data.aws_caller_identity.current.account_id}:${local.control_alerts_topic_name}"]
+    }
+  }
+}
+
+resource "aws_kms_key" "control_alerts" {
+  description             = "Encrypts Acme Health control-change alerts."
+  enable_key_rotation     = true
+  deletion_window_in_days = 7
+  policy                  = data.aws_iam_policy_document.control_alerts_key.json
+}
+
+resource "aws_kms_alias" "control_alerts" {
+  name          = "alias/acme-health-control-alerts"
+  target_key_id = aws_kms_key.control_alerts.key_id
 }
 
 resource "aws_sns_topic" "control_alerts" {
-  name              = "${local.name_prefix}-control-alerts-${local.suffix}"
+  name              = local.control_alerts_topic_name
   display_name      = "Acme Health control alerts"
-  kms_master_key_id = "alias/aws/sns"
+  kms_master_key_id = aws_kms_key.control_alerts.arn
 }
 
 resource "aws_sns_topic_subscription" "control_alerts_email" {
