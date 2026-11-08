@@ -26,7 +26,7 @@ with signed evidence, and OSCAL control documentation.
 | Lambda visibility and resilience | No active X-Ray tracing, DLQ, or reserved concurrency | Active tracing, an encrypted SQS DLQ, and reserved concurrency of five |
 | Application permissions | Broad `s3:*` and `dynamodb:*` actions | Enumerated application actions and scoped resources, with documented operational allowances |
 | API protection | No access logging, configured throttling, or WAF | Structured access logs and throttling configured; WAF remains deferred |
-| Change governance | Operator-driven deployment through the Makefile | Required PR policy checks and saved-plan apply on main, currently limited by deployment-role permissions |
+| Change governance | Operator-driven deployment through the Makefile | Required PR policy checks and saved-plan apply on main. Inline IAM and trust changes use a local apply |
 | Evidence | No automated signed evidence vault workflow | Cosign-signed bundles, SHA-256 digests, receipts, S3 versioning and Object Lock |
 | Control traceability | Starter gap list and framework mapping guidance | HIPAA-first policy metadata, implementation descriptions and evidence links in OSCAL |
 
@@ -41,12 +41,21 @@ API Gateway accepts `POST /intake`. Lambda writes submissions to DynamoDB and
 optional attachments to S3. Lambda is associated with private VPC subnets and
 uses S3 and DynamoDB gateway endpoints. Terraform configures customer-managed
 KMS encryption for the intake data stores, S3 TLS enforcement and versioning,
-scoped application IAM permissions, API access logging and throttling,
-CloudTrail management-event logging, an AWS Config recorder, and
-EventBridge alerts for trail and S3-encryption changes.
+scoped application IAM permissions, API access logging and throttling, and
+CloudTrail management-event logging.
 
-GitHub Actions uses OIDC and separate gate and deployment roles. Evidence is
-stored in a separate bucket within the same AWS account, with SSE-KMS,
+AWS Config records supported resource types in this Region, including global
+types, and a managed rule checks that S3 buckets keep server-side encryption.
+EventBridge publishes two alerts to one SNS topic: read-write CloudTrail calls
+named StopLogging, DeleteTrail, PutBucketEncryption, and DeleteBucketEncryption,
+and a change to NON_COMPLIANT on that Config rule. The topic is encrypted with
+customer-managed key `alias/acme-health-control-alerts`. `alert_email` is empty,
+so the topic has no subscriber until an operator sets one.
+
+GitHub Actions uses OIDC. Pull requests assume the gate role. Pushes to main
+assume the deployment role, apply the saved plan, and cannot write inline
+policies or trust policies or attach PowerUserAccess to the gate role. Evidence
+is stored in a separate bucket within the same AWS account, with SSE-KMS,
 versioning, blocked public access, and default Governance retention of 30 days.
 The retention period and mode are configurable; check actual object retention
 when verifying a run.
@@ -228,20 +237,27 @@ This is a custom subset, not an official complete HIPAA catalog.
 
 Demonstrated evidence:
 
-- [Successful deployment: 40017405490](https://github.com/jgage1194/cgep-capstone/actions/runs/40017405490)
+- [Current deployment: 42499992586](https://github.com/jgage1194/cgep-capstone/actions/runs/42499992586)
+- [Earlier successful deployment: 40017405490](https://github.com/jgage1194/cgep-capstone/actions/runs/40017405490)
 - [Rejected versioning change: 40018585656](https://github.com/jgage1194/cgep-capstone/actions/runs/40018585656)
 
-With authorized AWS access, verify a run from the repository root:
+Run 42499992586 is the current configuration. It applied reserved concurrency of
+five, the customer-managed alert key, and the deployment-role IAM fence, then
+signed and uploaded the evidence bundle. Run 40018585656 shows the gate rejecting
+a plan that suspends S3 versioning.
+
+With authorized AWS access, verify the current run from the repository root:
 
 ```bash
-bash scripts/verify-evidence.sh 40017405490 \
+bash scripts/verify-evidence.sh 42499992586 \
   --vault acme-health-intake-grc-evidence-vault-acf20522 \
   --profile default
 ```
 
 The verifier downloads the bundle, compares its SHA-256 digest, verifies the
 Cosign signature using the GitHub Actions issuer, and checks unexpired retention.
-Success prints `CHAIN INTACT for run 40017405490`. An evidence link grants no
+Success prints `CHAIN INTACT for run 42499992586`. The same command works for
+the earlier runs by substituting the run ID. An evidence link grants no
 access. The assessor needs S3 listing/read and retention-read permissions and
 KMS decryption access. Dependencies and Cosign trust services must be available.
 
@@ -259,13 +275,16 @@ error. It does not establish compliance for unmanaged resources.
 ## Limitations and follow-up
 
 - WAF protection remains a documented exception.
-- Config and EventBridge alert on the named trail and S3-encryption changes.
-  A scheduled drift check is still not implemented. Set `alert_email` to
-  subscribe an operator; an empty value leaves the SNS topic without a recipient.
+- Config records supported resources. EventBridge alerts on the named trail and
+  S3-encryption API calls, and on NON_COMPLIANT results from the S3 encryption
+  rule. The alert topic uses customer-managed key `alias/acme-health-control-alerts`.
+  A scheduled drift check is not implemented. `alert_email` is empty, so the
+  topic has no subscriber.
 - tfsec is disabled; the rubric's other scanners have not yet been verified.
 - The deployment role can change non-IAM resources outside this stack because
   PowerUserAccess is account-wide. It cannot write inline or trust policies
   on the stack roles, and it can attach PowerUserAccess only to itself.
+  The gate role remains assumable from any ref in this repository.
 - See [WRITEUP.md](WRITEUP.md) for behavior tests still outstanding and design tradeoffs.
 
 ## Repository layout
