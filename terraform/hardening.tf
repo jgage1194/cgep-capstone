@@ -217,6 +217,7 @@ resource "aws_cloudwatch_log_group" "api_access" {
 }
 
 # Encrypt the intake function's log group with the same customer-managed key.
+# The group already exists from the first invoke. Main imports it before planning.
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "/aws/lambda/${local.name_prefix}-handler-${local.suffix}"
   retention_in_days = 30
