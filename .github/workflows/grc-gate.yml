@@ -135,7 +135,8 @@ jobs:
               compliance.lambda_vpc \
               compliance.lambda_resilience \
               compliance.iam_least_privilege \
-              compliance.api_protection ; do
+              compliance.api_protection \
+              compliance.detection ; do
               [[ $FIRST -eq 1 ]] && FIRST=0 || printf ","
               set +e
               OUT=$(conftest test --policy policies --namespace "$ns" --output=json "$TF_WORKING_DIR/plan.json")

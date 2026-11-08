@@ -16,6 +16,7 @@ import rego.v1
 # Normalize both forms so the checks below can iterate consistently.
 iam_list(value) := value if is_array(value)
 
+# Wrap one IAM value so action and resource checks share one loop.
 iam_list(value) := [value] if not is_array(value)
 
 # Find all managed inline role policies remaining in the plan.
@@ -26,15 +27,10 @@ inline_role_policies contains policy if {
 	policy.change.after != null
 }
 
-# These exact operational actions may use Resource = "*" in this project.
-# This is not a blanket exemption for EC2 or X-Ray permissions.
+# X-Ray has no resource ARN for these publish actions, so Resource = "*" is the real scope.
+# ENI permissions are not listed. They come from the managed VPC execution policy,
+# and this check only reads inline aws_iam_role_policy documents.
 wildcard_resource_actions := {
-	"ec2:createnetworkinterface",
-	"ec2:describenetworkinterfaces",
-	"ec2:describesubnets",
-	"ec2:deletenetworkinterface",
-	"ec2:assignprivateipaddresses",
-	"ec2:unassignprivateipaddresses",
 	"xray:puttracesegments",
 	"xray:puttelemetryrecords",
 }
@@ -45,8 +41,7 @@ iam_statement_supported(statement) if {
 	statement.Effect == "Deny"
 }
 
-# Allow statements must explicitly list actions and resources.
-# NotAction and NotResource are intentionally unsupported by this baseline.
+# An Allow must name actions and resources. NotAction and NotResource stay unsupported.
 iam_statement_supported(statement) if {
 	statement.Effect == "Allow"
 

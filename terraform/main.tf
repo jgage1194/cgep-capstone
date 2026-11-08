@@ -118,6 +118,11 @@ resource "aws_dynamodb_table" "intake" {
     enabled     = true
     kms_key_arn = aws_kms_key.submissions.arn
   }
+
+  # CKV_AWS_28: Keep a continuous backup of intake records.
+  point_in_time_recovery {
+    enabled = true
+  }
 }
 
 ######################################################################
@@ -189,13 +194,15 @@ resource "aws_iam_role_policy" "lambda_inline" {
       {
         Effect   = "Allow"
         Action   = "s3:PutObject"
-        Resource = ["${aws_s3_bucket.uploads.arn}", "${aws_s3_bucket.uploads.arn}/*"]
+        Resource = [aws_s3_bucket.uploads.arn, "${aws_s3_bucket.uploads.arn}/*"]
       }
     ]
   })
 }
 
 resource "aws_lambda_function" "intake" {
+  #checkov:skip=CKV_AWS_272:AWS Signer code signing needs a signing profile and a signed deployment package, which this capstone does not operate.
+
   description      = "Patient intake handler deployed through the CGE-P policy gate"
   function_name    = "${local.name_prefix}-handler-${local.suffix}"
   role             = aws_iam_role.lambda.arn
@@ -237,7 +244,7 @@ resource "aws_lambda_function" "intake" {
   # GAP-05 (HIPAA 164.312(e)(1)): Creates VPC permissions and
   # private-subnet routing before attaching Lambda.
   depends_on = [
-    aws_iam_role_policy.lambda_vpc,
+    aws_iam_role_policy_attachment.lambda_vpc,
     aws_route_table_association.private,
     aws_vpc_endpoint.s3,
     aws_vpc_endpoint.dynamodb,

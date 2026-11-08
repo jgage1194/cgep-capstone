@@ -51,12 +51,6 @@ test_scoped_data_permissions_pass if {
 
 test_documented_operational_actions_pass if {
 	every action in [
-		"ec2:CreateNetworkInterface",
-		"ec2:DescribeNetworkInterfaces",
-		"ec2:DescribeSubnets",
-		"ec2:DeleteNetworkInterface",
-		"ec2:AssignPrivateIpAddresses",
-		"ec2:UnassignPrivateIpAddresses",
 		"xray:PutTraceSegments",
 		"xray:PutTelemetryRecords",
 	] {
@@ -98,6 +92,8 @@ test_unrestricted_data_resources_fail if {
 		"dynamodb:PutItem",
 		"kms:Decrypt",
 		"sqs:SendMessage",
+		"ec2:CreateNetworkInterface",
+		"ec2:DescribeNetworkInterfaces",
 	] {
 		plan := iam_plan([{
 			"Effect": "Allow",

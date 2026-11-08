@@ -189,7 +189,7 @@
               {
                 "uuid": "00de7cea-600f-4266-bee1-9815ec54dfbb",
                 "control-id": "hipaa-164.308-a-1-ii-d",
-                "description": "CloudTrail management-event logs and API access logs provide records that can support information-system activity review. X-Ray tracing and an asynchronous dead-letter queue provide additional operational visibility. Rego checks API log configuration, active tracing, and DLQ configuration.",
+                "description": "AWS Config records resource configuration, and a managed rule evaluates S3 server-side encryption. EventBridge routes CloudTrail calls that stop or delete a trail or change bucket encryption, and NON_COMPLIANT results from that Config rule, to an SNS topic. CloudTrail, API access logs, X-Ray, and the dead-letter queue remain supporting records. Rego checks the event patterns, SNS targets, Config rule, and recorder status.",
                 "props": [
                   {"name": "control-title", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "Information system activity review"},
                   {"name": "hipaa-citation", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "45 CFR 164.308(a)(1)(ii)(D)"},
@@ -198,8 +198,8 @@
                   {"name": "gap-id", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "GAP-06"},
                   {"name": "soc2-criterion", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "CC7.2"},
                   {"name": "cmmc-practice", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "SI.L2-3.14.6"},
-                  {"name": "policy-file", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "policies/api_protection.rego; policies/lambda_resilience.rego"},
-                  {"name": "terraform-resource", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "aws_cloudtrail.mgmt; aws_cloudwatch_log_group.api_access; aws_lambda_function.intake; aws_sqs_queue.intake_dlq"}
+                  {"name": "policy-file", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "policies/api_protection.rego; policies/lambda_resilience.rego; policies/detection.rego"},
+                  {"name": "terraform-resource", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "aws_cloudtrail.mgmt; aws_cloudwatch_log_group.api_access; aws_lambda_function.intake; aws_sqs_queue.intake_dlq; aws_config_configuration_recorder.this; aws_config_config_rule.s3_encryption; aws_cloudwatch_event_rule.control_changes; aws_cloudwatch_event_rule.config_noncompliant; aws_sns_topic.control_alerts"}
                 ],
                 "links": [
                   {
@@ -213,7 +213,7 @@
                     "text": "View successful deployment run"
                   }
                 ],
-                "remarks": "Partial supporting implementation: regular security review procedures, review records, alerting, and attack detection have not been demonstrated. Tracing and a DLQ are not substitutes for security monitoring. Reserved concurrency remains deferred pending quota approval; the DLQ applies to asynchronous invocations."
+                "remarks": "Alerts cover the named trail, encryption, and S3-encryption-rule events. Regular review procedures, a confirmed alert recipient, scheduled drift detection, and broader attack detection are not demonstrated. Reserved concurrency remains deferred pending quota approval; the DLQ applies to asynchronous invocations."
               },
               {
                 "uuid": "e552d94a-1b4b-4953-94fd-27d44f5b83a5",
@@ -250,12 +250,12 @@
                     "text": "View rejected versioning change"
                   }
                 ],
-                "remarks": "CM-3 is a project-authored supporting mapping for the configuration-change safeguards; it is not a claim of equivalence with HIPAA risk management. Organization-wide risk analysis, risk treatment decisions, independent approval, and effectiveness review remain outside this demonstration. The deployment role currently supports existing Lambda updates and pipeline operations."
+                "remarks": "CM-3 is a project-authored supporting mapping for the configuration-change safeguards; it is not a claim of equivalence with HIPAA risk management. Organization-wide risk analysis, risk treatment decisions, independent approval, and effectiveness review remain outside this demonstration. The deployment role can apply this configuration. PowerUserAccess covers non-IAM services and is account-wide. IAM writes are limited to the stack roles and the GitHub OIDC provider."
               }
             ]
           }
         ],
-        "remarks": "WAF and reserved concurrency remain deferred. Governance-mode Object Lock preserves evidence for 30 days but can be bypassed with the required permission. The verifier checks checksum, signature, and retention; signer identity, receipt object version, and current deployed state need separate review. Deployment permissions currently cover existing Lambda updates and pipeline state/evidence operations."
+        "remarks": "WAF and reserved concurrency remain deferred. Governance-mode Object Lock preserves evidence for 30 days but can be bypassed with the required permission. The verifier checks checksum, signature, and retention; signer identity, receipt object version, and current deployed state need separate review. The deployment role can apply the managed configuration. PowerUserAccess is account-wide for non-IAM services, and IAM writes are limited to the stack roles."
       }
     ]
   }

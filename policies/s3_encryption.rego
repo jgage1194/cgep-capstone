@@ -79,6 +79,7 @@ deny_s3_encryption contains msg if {
 	)
 }
 
+# Reject a bucket with no explicit SSE-S3 or SSE-KMS configuration in this plan.
 deny_s3_encryption contains msg if {
 	some bucket in s3_encryption_buckets
 	not s3_encryption_configured(bucket)
@@ -89,6 +90,7 @@ deny_s3_encryption contains msg if {
 	)
 }
 
+# SSE-S3 meets the general baseline. A PHI bucket must use a customer-managed key from this plan.
 deny_s3_encryption contains msg if {
 	some bucket in s3_encryption_buckets
 	bucket.change.after.tags_all.DataClass == "phi"

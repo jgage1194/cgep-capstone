@@ -41,8 +41,9 @@ API Gateway accepts `POST /intake`. Lambda writes submissions to DynamoDB and
 optional attachments to S3. Lambda is associated with private VPC subnets and
 uses S3 and DynamoDB gateway endpoints. Terraform configures customer-managed
 KMS encryption for the intake data stores, S3 TLS enforcement and versioning,
-scoped application IAM permissions, API access logging and throttling, and
-CloudTrail management-event logging.
+scoped application IAM permissions, API access logging and throttling,
+CloudTrail management-event logging, an AWS Config recorder, and
+EventBridge alerts for trail and S3-encryption changes.
 
 GitHub Actions uses OIDC and separate gate and deployment roles. Evidence is
 stored in a separate bucket within the same AWS account, with SSE-KMS,
@@ -59,7 +60,7 @@ when verifying a run.
 | GAP-03: S3 TLS enforcement | [s3_secure_transport.rego](policies/s3_secure_transport.rego) | 164.312(e)(1) |
 | GAP-04: S3 versioning | [s3_versioning.rego](policies/s3_versioning.rego) | 164.308(a)(7) |
 | GAP-05: Lambda VPC association | [lambda_vpc.rego](policies/lambda_vpc.rego) | 164.312(e)(1) |
-| GAP-06: Lambda tracing, DLQ, concurrency | [lambda_resilience.rego](policies/lambda_resilience.rego) | 164.308(a)(1)(ii)(D), supporting safeguards |
+| GAP-06: Lambda tracing, DLQ, concurrency, and control-change alerts | [lambda_resilience.rego](policies/lambda_resilience.rego), [detection.rego](policies/detection.rego) | 164.308(a)(1)(ii)(D), supporting safeguards |
 | GAP-07: IAM permissions | [iam_least_privilege.rego](policies/iam_least_privilege.rego) | 164.312(a)(1) |
 | GAP-08: API logging, throttling, WAF exception | [api_protection.rego](policies/api_protection.rego) | 164.312(b), logging |
 
@@ -145,6 +146,15 @@ opa check --strict policies
 opa test policies -v
 ```
 
+The state bucket name stays in ignored `terraform/backend.hcl` and in the
+`TF_BACKEND_CONFIG` GitHub variable. A review that only checks the configuration
+does not need that bucket or this account's credentials:
+
+```bash
+terraform -chdir=terraform init -backend=false -input=false
+terraform -chdir=terraform validate
+```
+
 To use the same unit-test runner as CI:
 
 ```bash
@@ -161,7 +171,7 @@ bash scripts/policy-gate.sh --workspace terraform --policy policies
 The gate exports `terraform/plan.json` and writes
 `evidence/capstone/conftest-results.json`. Its local `--all-namespaces` option can
 include empty results for test namespaces; the CI workflow explicitly selects
-the eight enforcement namespaces. Policy unit tests are run separately.
+the nine enforcement namespaces. Policy unit tests are run separately.
 Do not commit saved plans, state, or generated evidence.
 
 To exercise the deployed API with synthetic intake data:
@@ -191,7 +201,7 @@ check before merging; branch protection is a GitHub setting, not defined by the
 workflow YAML alone.
 
 1. Run policy unit tests, initialize and validate Terraform, and save a plan.
-2. Evaluate the plan using the eight capstone policy namespaces.
+2. Evaluate the plan using the nine capstone policy namespaces.
 3. On a successful push run on `main`, apply that same saved plan. PR and manual
    runs skip apply. The main run generates its own plan; it does not reuse the PR plan.
 4. Bundle available policy results, plan outputs, and apply output; hash and sign
@@ -199,9 +209,9 @@ workflow YAML alone.
 5. Preserve GitHub artifacts for 90 days and report PR findings. Evidence steps
    are attempted even after earlier failures. Required evidence steps must succeed.
 
-The deployment role currently supports updates to the existing Lambda and state
-and evidence operations. A plan requiring other write permissions will fail;
-expanding the role remains planned work. Advisory warnings do not block apply.
+The deployment role can apply the stack: PowerUserAccess for the non-IAM
+resources, and an inline policy for the IAM roles and GitHub OIDC provider
+this configuration manages. Advisory warnings do not block apply.
 The workflow currently uses Conftest; tfsec is deferred.
 
 ## Assessor walkthrough
@@ -247,10 +257,12 @@ error. It does not establish compliance for unmanaged resources.
 ## Limitations and follow-up
 
 - WAF protection and reserved concurrency remain documented exceptions.
-- Logs and tracing are configured, but targeted operational detections, alert
-  routing, and recurring drift checks have not yet been implemented.
+- Config and EventBridge alert on the named trail and S3-encryption changes.
+  A scheduled drift check is still not implemented. Set `alert_email` to
+  subscribe an operator; an empty value leaves the SNS topic without a recipient.
 - tfsec is disabled; the rubric's other scanners have not yet been verified.
-- Deployment-role permissions do not yet cover the full workload lifecycle.
+- The deployment role can change non-IAM resources outside this stack because
+  PowerUserAccess is account-wide. IAM writes are limited to the stack roles.
 - See [WRITEUP.md](WRITEUP.md) for behavior tests still outstanding and design tradeoffs.
 
 ## Repository layout
@@ -258,7 +270,7 @@ error. It does not establish compliance for unmanaged resources.
 | Path | Purpose |
 | --- | --- |
 | `terraform/` | Workload, safeguards, evidence vault, backend and pipeline roles |
-| `policies/` | Eight Rego policies and their test fixtures in `policies/tests/` |
+| `policies/` | Nine Rego policies and their test fixtures in `policies/tests/` |
 | `.github/workflows/grc-gate.yml` | Policy gate, main deployment and signed evidence |
 | `scripts/` | Local policy evaluation, capture and evidence verification |
 | `oscal/` | HIPAA subset catalog, profile, resolved catalog and component |
@@ -272,8 +284,8 @@ remain available. The course's full brief is
 
 ## Cost
 
-This completed deployment adds customer-managed KMS keys, logs, state storage,
-and retained evidence to the starter. Costs depend on usage, retention and AWS
+This completed deployment adds customer-managed KMS keys, logs, AWS Config
+recording, state storage, and retained evidence to the starter. Costs depend on usage, retention and AWS
 pricing; the starter's near-zero short-lived estimate is not a budget for this
 expanded environment. Account for retained objects during cleanup.
 

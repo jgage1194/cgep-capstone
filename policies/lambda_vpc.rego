@@ -25,6 +25,7 @@ lambda_workload_vpc_ids contains id if {
 }
 
 # Resolve each assigned network resource to the intended VPC.
+# A subnet or security group matches when this plan records both its id and vpc_id.
 lambda_network_resource_matches(resource_type, id, vpc_id) if {
 	is_string(id)
 	id != ""
@@ -36,6 +37,7 @@ lambda_network_resource_matches(resource_type, id, vpc_id) if {
 	resource.change.after.vpc_id == vpc_id
 }
 
+# Every assigned subnet and security group must belong to aws_vpc.main.
 lambda_uses_workload_vpc(function) if {
 	some vpc_id in lambda_workload_vpc_ids
 	some config in function.change.after.vpc_config
@@ -55,6 +57,7 @@ lambda_uses_workload_vpc(function) if {
 	}
 }
 
+# Block a Lambda with no VPC config, or whose network ids do not resolve to aws_vpc.main.
 deny_lambda_vpc contains msg if {
 	some function in input.resource_changes
 	function.mode == "managed"

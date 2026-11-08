@@ -15,6 +15,7 @@ import rego.v1
 # IAM permits some fields to be either a single value or an array.
 s3_tls_list(value) := value if is_array(value)
 
+# Wrap one value so every caller can iterate the same shape.
 s3_tls_list(value) := [value] if not is_array(value)
 
 # Accept both common representations of all principals.
@@ -22,6 +23,7 @@ s3_tls_all_principals(statement) if {
 	statement.Principal == "*"
 }
 
+# The IAM policy document data source emits Principal.AWS = "*".
 s3_tls_all_principals(statement) if {
 	"*" in s3_tls_list(statement.Principal.AWS)
 }

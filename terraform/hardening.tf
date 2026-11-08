@@ -155,27 +155,11 @@ resource "aws_security_group" "lambda" {
 
 # GAP-05 (HIPAA 164.312(e)(1)): Allows Lambda to manage the network
 # interfaces required for attachment to the private subnets.
-resource "aws_iam_role_policy" "lambda_vpc" {
-  name = "intake-vpc-access"
-  role = aws_iam_role.lambda.id
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Effect = "Allow"
-        Action = [
-          "ec2:CreateNetworkInterface",
-          "ec2:DescribeNetworkInterfaces",
-          "ec2:DescribeSubnets",
-          "ec2:DeleteNetworkInterface",
-          "ec2:AssignPrivateIpAddresses",
-          "ec2:UnassignPrivateIpAddresses"
-        ]
-        Resource = "*"
-      }
-    ]
-  })
+# AWS cannot scope these ENI actions to specific resource ARNs, so this
+# uses the managed VPC execution policy instead of an inline wildcard.
+resource "aws_iam_role_policy_attachment" "lambda_vpc" {
+  role       = aws_iam_role.lambda.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 # GAP-06: Allows Lambda to publish trace segments and telemetry to X-Ray.
