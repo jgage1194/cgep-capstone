@@ -1,3 +1,17 @@
+variable "alert_email" {
+  type        = string
+  description = "Optional email address subscribed to control-change alerts. Leave empty until an operator confirms the subscription."
+  default     = ""
+
+  validation {
+    condition = (
+      var.alert_email == "" ||
+      can(regex("^[^@[:space:]]+@[^@[:space:]]+$", var.alert_email))
+    )
+    error_message = "alert_email must be empty or a single email address."
+  }
+}
+
 variable "aws_region" {
   type        = string
   description = "AWS region for the starter."

@@ -32,7 +32,7 @@ and remaining limitations.
 | GAP-03 | S3 uploads bucket has no policy denying non-TLS requests (no `aws:SecureTransport` deny).                                                          | `aws_s3_bucket.uploads`             | HIPAA 164.312(e)(1)            | Terraform and Policy | Closed                                                             |
 | GAP-04 | S3 uploads bucket has no versioning. PHI overwrites are unrecoverable.                                                                             | `aws_s3_bucket.uploads`             | HIPAA 164.308(a)(7)            | Terraform and Policy | Closed                                                             |
 | GAP-05 | Lambda runs in the default Lambda environment, not in the VPC the starter provisions.                                                              | `aws_lambda_function.intake`        | HIPAA 164.312(e)(1)            | Terraform and Policy | Closed                                                             |
-| GAP-06 | No reserved concurrency, no DLQ, no X-Ray.                                                                                                         | `aws_lambda_function.intake`        | HIPAA 164.308(a)(1)(ii)(D)     | Terraform and Policy | Partially Closed. No reserved concurrency - Exception documented   |
+| GAP-06 | No reserved concurrency, no DLQ, no X-Ray.                                                                                                         | `aws_lambda_function.intake`        | HIPAA 164.308(a)(1)(ii)(D)     | Terraform and Policy | Closed. Reserved concurrency is 5.                                 |
 | GAP-07 | Lambda IAM role has `dynamodb:*` and `s3:*` on the workload resources. Wildly over-broad.                                                          | `aws_iam_role_policy.lambda_inline` | HIPAA 164.312(a)(1)            | Terraform and Policy | Closed                                                             |
 | GAP-08 | API Gateway has no access logging, no throttling, no WAF.                                                                                          | `aws_apigatewayv2_stage.default`    | HIPAA 164.312(b)               | Terraform and Policy | Partially Closed. No WAF - Exception documented                    |
 
@@ -67,16 +67,30 @@ Required checks prevent merging changes that fail the policy gate.
 After merge, the workflow evaluates a fresh saved plan before
 applying that same plan.
 
-The intended design is to apply all changes in the saved Terraform
-plan after the policy gate passes. Deployment permissions currently
-support existing Lambda updates and pipeline operations. Expanding
-those permissions to cover the remaining managed resources is
-planned follow-up work.
+The deployment role applies the non-IAM changes in the saved Terraform
+plan after the policy gate passes. PowerUserAccess covers those
+resources. Inline IAM policies and trust policies are outside that
+role, so a main-branch job cannot expand them.
 
 I accepted automated deployment without an additional manual
 approval step. Passing policy checks provides confidence in the
 specific conditions tested; it does not guarantee that every
 change is secure or functionally correct.
+
+### Remote state
+
+Terraform state lives in the S3 bucket this stack creates. GitHub Actions
+and a local operator share that state. The committed configuration only
+declares `backend "s3" {}`. The bucket, key, and encryption settings are
+in ignored `terraform/backend.hcl` and in the `TF_BACKEND_CONFIG`
+repository variable, so the repository does not name the state bucket
+and does not contain credentials.
+
+A grader does not need this account's state. `terraform init -backend=false`
+and `terraform validate` check the configuration on their own. The Rego
+suite runs against fixtures, and a gap check can plan a copy of this
+configuration in another account. The shared backend matters for the
+GitHub deployment, which is what produces the signed evidence runs.
 
 ### Single AWS Account
 
@@ -100,9 +114,9 @@ I made the S3 checks apply to every managed bucket in the plan
 rather than specific bucket names. This allows new buckets to
 receive the same checks without requiring a new policy for each.
 
-Blocking findings stop the deployment path. Deferred items, such
-as WAF protection and reserved concurrency, produce warnings so
-they remain visible without preventing deployment.
+Blocking findings stop the deployment path. The deferred WAF
+exception produces a warning so it stays visible without preventing
+deployment.
 
 The tradeoff is maintaining both the infrastructure configuration
 and the policy logic. Tests help verify that the policies accept
@@ -114,7 +128,7 @@ were designed to catch.
 A pull request targeting main starts the GRC workflow. The workflow
 authenticates to AWS through OIDC, runs the policy unit tests,
 validates Terraform, and creates a saved plan. Conftest evaluates
-that plan against the eight capstone policy namespaces.
+that plan against the nine capstone policy namespaces.
 
 Blocking findings fail the required check and prevent merging.
 Documented warnings remain visible without blocking deployment.
@@ -201,18 +215,16 @@ supporting framework mappings.
 The capstone profile would continue selecting only the safeguards
 relevant to this project from that broader catalog.
 
-### GAP-06: Reserved concurrency pending quota approval
+### GAP-06: Reserved concurrency
 
-I configured an encrypted dead-letter queue and active X-Ray tracing.
-Reserved concurrency remains deferred because the account's regional
-concurrency quota is 10, and AWS requires 10 executions to remain
-unreserved. This prevented deployment of the intended limit of five.
+I configured an encrypted dead-letter queue, active X-Ray tracing,
+and reserved concurrency of five. The first attempt failed because
+the account quota was 10 and AWS keeps 10 executions unreserved.
+The quota increase has been approved, so the limit of five is set
+and the policy now blocks a plan that removes it.
 
-I requested a quota increase on October 23, 2026. After approval,
-I would restore the Terraform setting, apply it, and verify the
-five-execution limit. GAP-06 remains partially addressed. Tracing
-and asynchronous DLQ delivery also require separate behavior tests;
-the normal intake smoke test does not verify those features.
+Tracing and asynchronous DLQ delivery still need separate behavior
+tests. The normal intake smoke test does not exercise those features.
 
 ### GAP-08: WAF protection deferred
 
@@ -246,12 +258,59 @@ but currently accepts any certificate identity from that issuer.
 A future improvement would restrict verification to this
 repository's specific workflow identity.
 
-### Expand deployment permissions
+### Deployment permissions
 
-Extend the deployment role's permissions to support changes across
-the Terraform-managed workload. The workflow already applies the
-saved plan after policy evaluation, but the role currently supports
-existing Lambda updates and pipeline operations.
+The main deployment role can apply this configuration. PowerUserAccess
+covers the VPC, data stores, KMS keys, logging, Config, EventBridge,
+and S3 changes. An inline policy lets it read the gate, deployment,
+Lambda, and Config roles, and pass the Lambda and Config roles only
+to those services. It can attach only the managed policy each role
+already uses. PowerUserAccess can be attached only to the deployment
+role. The gate role, which any ref in this repository can assume, can
+receive only ReadOnlyAccess. Inline-policy writes, trust-policy
+updates, and permissions-boundary changes are denied on all four roles.
+
+PowerUserAccess is account-wide, so the role can change non-IAM
+resources that Terraform does not manage. I accepted that instead of
+maintaining an action list that would miss the next resource.
+AdministratorAccess is not attached. Creating the account's GitHub
+OIDC provider still needs a local apply, because that create action
+cannot be limited to one provider ARN. Changing an inline policy or
+trust policy also needs a local apply. The deployment role cannot
+make those IAM changes.
+
+### Activity review alerts
+
+I enabled AWS Config with the lab pattern: one recorder for supported
+resources, including global resource types, delivering history to an
+encrypted and versioned bucket. An account can keep only one recorder
+in a Region, so a recorder left over from the lab has to be removed
+before this one can be created.
+
+A managed Config rule checks that S3 buckets keep server-side
+encryption. EventBridge publishes two alerts to one SNS topic. The
+first matches read-write CloudTrail calls named StopLogging,
+DeleteTrail, PutBucketEncryption, and DeleteBucketEncryption. The
+second matches a change to NON_COMPLIANT on that Config rule. Those
+event lists are the noise control. The topic is the alert route.
+`alert_email` subscribes an operator; I left it empty so the topic
+does not wait on an unconfirmed address.
+
+### Checkov high findings
+
+I enabled point-in-time recovery on the submissions table so intake
+records have a continuous backup.
+
+I replaced the inline Lambda VPC policy with the AWS managed
+`AWSLambdaVPCAccessExecutionRole`. The previous policy allowed
+network-interface actions on every resource. Lambda cannot restrict
+those ENI actions to specific ARNs, and the managed policy is the
+supported way to grant them.
+
+I did not configure AWS Signer for the intake function. Code signing
+needs a signing profile and a signed deployment package. Checkov
+`CKV_AWS_272` is skipped on `aws_lambda_function.intake` for that
+reason.
 
 ### Additional Scanning
 
@@ -262,10 +321,5 @@ findings remains follow-up work.
 
 ## What I didn't get to
 
-WAF protection and reserved concurrency remain deferred, with the
-reasons and follow-up work documented above.
-
-Apply on merge is operational, but deployment permissions currently
-support existing Lambda updates and pipeline operations. Expanding
-the role to support changes across the Terraform-managed workload
-remains unfinished.
+WAF protection, Lambda code signing, and a scheduled drift check
+remain deferred, with the reasons and follow-up work documented above.

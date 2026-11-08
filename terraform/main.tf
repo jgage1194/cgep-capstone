@@ -118,6 +118,11 @@ resource "aws_dynamodb_table" "intake" {
     enabled     = true
     kms_key_arn = aws_kms_key.submissions.arn
   }
+
+  # CKV_AWS_28: Keep a continuous backup of intake records.
+  point_in_time_recovery {
+    enabled = true
+  }
 }
 
 ######################################################################
@@ -144,7 +149,7 @@ resource "aws_s3_bucket" "uploads" {
 ######################################################################
 # Lambda — the intake handler.
 # GAP-05: not deployed inside the VPC.
-# GAP-06: no reserved concurrency, no DLQ, no X-Ray.
+# GAP-06: reserved concurrency, DLQ, and X-Ray are set in this resource.
 # GAP-07: IAM role has dynamodb:* and s3:* on the resources (over-broad).
 ######################################################################
 
@@ -189,13 +194,15 @@ resource "aws_iam_role_policy" "lambda_inline" {
       {
         Effect   = "Allow"
         Action   = "s3:PutObject"
-        Resource = ["${aws_s3_bucket.uploads.arn}", "${aws_s3_bucket.uploads.arn}/*"]
+        Resource = [aws_s3_bucket.uploads.arn, "${aws_s3_bucket.uploads.arn}/*"]
       }
     ]
   })
 }
 
 resource "aws_lambda_function" "intake" {
+  #checkov:skip=CKV_AWS_272:AWS Signer code signing needs a signing profile and a signed deployment package, which this capstone does not operate.
+
   description      = "Patient intake handler deployed through the CGE-P policy gate"
   function_name    = "${local.name_prefix}-handler-${local.suffix}"
   role             = aws_iam_role.lambda.arn
@@ -205,9 +212,9 @@ resource "aws_lambda_function" "intake" {
   source_code_hash = data.archive_file.handler.output_base64sha256
   timeout          = 10
 
-  # GAP-06: Limits simultaneous intake executions to five
-  # to control scaling and pressure on downstream services.
-  # reserved_concurrent_executions = 5
+  # GAP-06 (HIPAA 164.308(a)(1)(ii)(D)): Caps simultaneous intake
+  # executions at five now that the account concurrency quota allows it.
+  reserved_concurrent_executions = 5
 
   # GAP-06: Enables X-Ray tracing for sampled Lambda invocations
   # to support performance and failure investigation.
@@ -237,7 +244,7 @@ resource "aws_lambda_function" "intake" {
   # GAP-05 (HIPAA 164.312(e)(1)): Creates VPC permissions and
   # private-subnet routing before attaching Lambda.
   depends_on = [
-    aws_iam_role_policy.lambda_vpc,
+    aws_iam_role_policy_attachment.lambda_vpc,
     aws_route_table_association.private,
     aws_vpc_endpoint.s3,
     aws_vpc_endpoint.dynamodb,

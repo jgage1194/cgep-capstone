@@ -144,6 +144,14 @@ resource "aws_iam_role_policy_attachment" "deploy_readonly" {
   policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
 }
 
+# Non-IAM changes for this stack: VPC, data stores, KMS, logging, Config,
+# EventBridge, and the evidence bucket. Scoped IAM reads and managed-policy
+# attachment stay in deploy_iam.
+resource "aws_iam_role_policy_attachment" "deploy_power_user" {
+  role       = aws_iam_role.grc_deploy.name
+  policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
+}
+
 output "deploy_role_arn" {
   description = "GitHub Actions role used for deployment from main."
   value       = aws_iam_role.grc_deploy.arn
@@ -179,36 +187,177 @@ resource "aws_iam_role_policy" "deploy_evidence" {
   policy = aws_iam_role_policy.grc_gate_evidence.policy
 }
 
-# Allow deployment updates to the existing intake function.
-resource "aws_iam_role_policy" "deploy_lambda" {
-  name = "capstone-lambda-deployment"
+# PowerUserAccess excludes IAM. This policy adds only role reads and the
+# managed-policy attachment each role already has. Inline-policy and trust
+# writes are denied: IAM cannot limit those calls to a specific document, the
+# deploy role could grant itself iam:*, and the gate role is assumable from
+# any ref. PowerUserAccess stays on the main-only deploy role.
+resource "aws_iam_role_policy" "deploy_iam" {
+  name = "capstone-workload-iam"
   role = aws_iam_role.grc_deploy.id
 
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "UpdateIntakeFunction"
+        Sid    = "ReadAndTagStackRoles"
         Effect = "Allow"
         Action = [
-          "lambda:UpdateFunctionCode",
-          "lambda:UpdateFunctionConfiguration",
-          "lambda:TagResource",
-          "lambda:UntagResource"
+          "iam:GetRole",
+          "iam:GetRolePolicy",
+          "iam:ListRolePolicies",
+          "iam:ListAttachedRolePolicies",
+          "iam:ListInstanceProfilesForRole",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:UpdateRole",
         ]
-        Resource = aws_lambda_function.intake.arn
+        Resource = [
+          aws_iam_role.grc_gate.arn,
+          aws_iam_role.grc_deploy.arn,
+          aws_iam_role.lambda.arn,
+          aws_iam_role.config.arn,
+        ]
       },
       {
-        Sid      = "PassIntakeExecutionRole"
-        Effect   = "Allow"
-        Action   = "iam:PassRole"
-        Resource = aws_iam_role.lambda.arn
+        Sid    = "AttachReadOnlyToPipelineRoles"
+        Effect = "Allow"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+        ]
+        Resource = [
+          aws_iam_role.grc_gate.arn,
+          aws_iam_role.grc_deploy.arn,
+        ]
         Condition = {
-          StringEquals = {
-            "iam:PassedToService" = "lambda.amazonaws.com"
+          ArnEquals = {
+            "iam:PolicyARN" = "arn:aws:iam::aws:policy/ReadOnlyAccess"
           }
         }
-      }
+      },
+      {
+        Sid    = "AttachPowerUserToDeployRole"
+        Effect = "Allow"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+        ]
+        Resource = aws_iam_role.grc_deploy.arn
+        Condition = {
+          ArnEquals = {
+            "iam:PolicyARN" = "arn:aws:iam::aws:policy/PowerUserAccess"
+          }
+        }
+      },
+      {
+        Sid    = "AttachLambdaExecution"
+        Effect = "Allow"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+        ]
+        Resource = aws_iam_role.lambda.arn
+        Condition = {
+          ArnEquals = {
+            "iam:PolicyARN" = [
+              "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+              "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+            ]
+          }
+        }
+      },
+      {
+        Sid    = "AttachConfigService"
+        Effect = "Allow"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+        ]
+        Resource = aws_iam_role.config.arn
+        Condition = {
+          ArnEquals = {
+            "iam:PolicyARN" = "arn:aws:iam::aws:policy/service-role/AWS_ConfigRole"
+          }
+        }
+      },
+      {
+        Sid    = "DenyInlineAndTrustEdits"
+        Effect = "Deny"
+        Action = [
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:PutRolePermissionsBoundary",
+          "iam:DeleteRolePermissionsBoundary",
+        ]
+        Resource = [
+          aws_iam_role.grc_gate.arn,
+          aws_iam_role.grc_deploy.arn,
+          aws_iam_role.lambda.arn,
+          aws_iam_role.config.arn,
+        ]
+      },
+      {
+        Sid    = "DenyPowerUserBeyondDeployRole"
+        Effect = "Deny"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+        ]
+        Resource = [
+          aws_iam_role.grc_gate.arn,
+          aws_iam_role.lambda.arn,
+          aws_iam_role.config.arn,
+        ]
+        Condition = {
+          ArnEquals = {
+            "iam:PolicyARN" = "arn:aws:iam::aws:policy/PowerUserAccess"
+          }
+        }
+      },
+      {
+        Sid    = "PassStackRoles"
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        Resource = [
+          aws_iam_role.lambda.arn,
+          aws_iam_role.config.arn,
+        ]
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = [
+              "lambda.amazonaws.com",
+              "config.amazonaws.com",
+            ]
+          }
+        }
+      },
+      {
+        Sid    = "ManageGitHubOidcProvider"
+        Effect = "Allow"
+        Action = [
+          "iam:GetOpenIDConnectProvider",
+          "iam:UpdateOpenIDConnectProviderThumbprint",
+          "iam:AddClientIDToOpenIDConnectProvider",
+          "iam:RemoveClientIDFromOpenIDConnectProvider",
+          "iam:TagOpenIDConnectProvider",
+          "iam:UntagOpenIDConnectProvider",
+          "iam:DeleteOpenIDConnectProvider",
+        ]
+        Resource = local.github_oidc_arn
+      },
+      {
+        Sid    = "CreateServiceLinkedRoles"
+        Effect = "Allow"
+        Action = [
+          "iam:CreateServiceLinkedRole",
+          "iam:TagRole",
+        ]
+        Resource = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/aws-service-role/*"
+      },
     ]
   })
 }
