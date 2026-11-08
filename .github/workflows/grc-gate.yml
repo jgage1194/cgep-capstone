@@ -6,8 +6,11 @@ on:
     branches: [main]
   push:
     branches: [main]
-  # Allow a manual run from the Actions page.  
+  # Allow a manual run from the Actions page.
   workflow_dispatch:
+  # Collect signed evidence even when nobody pushes. Apply stays limited to main pushes.
+  schedule:
+    - cron: "15 12 * * *"
 
 
 permissions:
@@ -38,10 +41,15 @@ jobs:
   grc-gate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # A scheduled run has no github.event.repository.name.
+      - name: Set repository name for scheduled runs
+        if: github.event_name == 'schedule'
+        run: echo "TF_VAR_github_repo=${GITHUB_REPOSITORY#*/}" >> "$GITHUB_ENV"
 
       - name: Configure AWS credentials (OIDC)
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           # Main deployments use the deployment role; PRs use the gate role.
           role-to-assume: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AWS_DEPLOY_ROLE_ARN || vars.AWS_ROLE_ARN }}
@@ -52,7 +60,7 @@ jobs:
         run: aws sts get-caller-identity          
 
       - name: Setup terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: 1.16.4
           terraform_wrapper: false
@@ -68,9 +76,18 @@ jobs:
       #       -o /usr/local/bin/tfsec && chmod +x /usr/local/bin/tfsec
       
       - name: Install Cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
         with:
           cosign-release: 'v2.2.4'
+
+      - name: Validate OSCAL
+        id: oscal
+        run: bash scripts/validate-oscal.sh
+
+      - name: Terraform control tests
+        id: terraform_test
+        working-directory: ${{ env.TF_WORKING_DIR }}
+        run: terraform test
 
       - name: Run policy unit tests
         id: policy_tests
@@ -239,7 +256,7 @@ jobs:
       - name: Upload evidence artifact
         id: artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: grc-evidence-${{ github.run_id }}
           path: |
@@ -254,8 +271,10 @@ jobs:
           always() &&
           github.event_name == 'pull_request' &&
           github.event.pull_request.head.repo.full_name == github.repository
-        uses: actions/github-script@v7
+        uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
         env:
+          OSCAL: ${{ steps.oscal.outcome }}
+          TERRAFORM_TEST: ${{ steps.terraform_test.outcome }}
           POLICY_TESTS: ${{ steps.policy_tests.outcome }}
           PLAN: ${{ steps.plan.outcome }}
           CONFTEST: ${{ steps.conftest.outcome }}
@@ -289,6 +308,8 @@ jobs:
 
             // Build a summary without including the Terraform plan contents.
             const checks = [
+              ['OSCAL validation', process.env.OSCAL],
+              ['Terraform control tests', process.env.TERRAFORM_TEST],
               ['Policy unit tests', process.env.POLICY_TESTS],
               ['Terraform plan', process.env.PLAN],
               ['Conftest gate', process.env.CONFTEST],
@@ -350,6 +371,8 @@ jobs:
         if: always()
         shell: bash
         env:
+          OSCAL: ${{ steps.oscal.outcome }}
+          TERRAFORM_TEST: ${{ steps.terraform_test.outcome }}
           POLICY_TESTS: ${{ steps.policy_tests.outcome }}
           PLAN: ${{ steps.plan.outcome }}
           CONFTEST: ${{ steps.conftest.outcome }}
@@ -363,6 +386,8 @@ jobs:
 
           # Every required step must succeed.
           # Failed, skipped, or missing outcomes fail this check.
+          test "$OSCAL" = "success"
+          test "$TERRAFORM_TEST" = "success"
           test "$POLICY_TESTS" = "success"
           test "$PLAN" = "success"
           test "$CONFTEST" = "success"
