@@ -45,8 +45,8 @@ resource "aws_cloudwatch_event_target" "evidence_collection" {
   target_id = "evidence-log"
   arn       = aws_cloudwatch_log_group.evidence_schedule.arn
 
-  input = jsonencode({
-    collected_by = "eventbridge"
-    purpose      = "daily-evidence-marker"
-  })
+  # A CloudWatch Logs target accepts only an input transformer.
+  input_transformer {
+    input_template = "{\"collected_by\":\"eventbridge\",\"purpose\":\"daily-evidence-marker\"}"
+  }
 }

@@ -126,6 +126,20 @@ jobs:
            
            # Check the Terraform configuration.
            terraform validate
+
+           # Lambda created this log group on first invoke. Adopt it on main
+           # before planning so apply updates encryption instead of creating it.
+           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == "refs/heads/main" ]]; then
+             if ! terraform state show -no-color aws_cloudwatch_log_group.lambda >/dev/null 2>&1; then
+               suffix="$(terraform state pull | jq -r '.resources[] | select(.type=="random_id" and .name=="suffix") | .instances[0].attributes.hex')"
+               test -n "$suffix" && test "$suffix" != "null"
+               terraform import \
+                 -input=false \
+                 -lock-timeout=60s \
+                 aws_cloudwatch_log_group.lambda \
+                 "/aws/lambda/acme-health-intake-handler-${suffix}"
+             fi
+           fi
            
            # Save the proposed changes and readable output.
            terraform plan \
