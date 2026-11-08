@@ -32,7 +32,7 @@ and remaining limitations.
 | GAP-03 | S3 uploads bucket has no policy denying non-TLS requests (no `aws:SecureTransport` deny).                                                          | `aws_s3_bucket.uploads`             | HIPAA 164.312(e)(1)            | Terraform and Policy | Closed                                                             |
 | GAP-04 | S3 uploads bucket has no versioning. PHI overwrites are unrecoverable.                                                                             | `aws_s3_bucket.uploads`             | HIPAA 164.308(a)(7)            | Terraform and Policy | Closed                                                             |
 | GAP-05 | Lambda runs in the default Lambda environment, not in the VPC the starter provisions.                                                              | `aws_lambda_function.intake`        | HIPAA 164.312(e)(1)            | Terraform and Policy | Closed                                                             |
-| GAP-06 | No reserved concurrency, no DLQ, no X-Ray.                                                                                                         | `aws_lambda_function.intake`        | HIPAA 164.308(a)(1)(ii)(D)     | Terraform and Policy | Closed. Reserved concurrency is 5.                                 |
+| GAP-06 | No reserved concurrency, no DLQ, no X-Ray.                                                                                                         | `aws_lambda_function.intake`        | HIPAA 164.308(a)(1)(ii)(D)     | Terraform and Policy | Lambda closed at concurrency 5. Alerts are deployed; no subscriber or drift schedule. |
 | GAP-07 | Lambda IAM role has `dynamodb:*` and `s3:*` on the workload resources. Wildly over-broad.                                                          | `aws_iam_role_policy.lambda_inline` | HIPAA 164.312(a)(1)            | Terraform and Policy | Closed                                                             |
 | GAP-08 | API Gateway has no access logging, no throttling, no WAF.                                                                                          | `aws_apigatewayv2_stage.default`    | HIPAA 164.312(b)               | Terraform and Policy | Partially Closed. No WAF - Exception documented                    |
 
@@ -155,20 +155,30 @@ even when earlier checks fail, preserving available failure results.
 An assessor can start at oscal/components/compliant-acme.json,
 select a HIPAA requirement, review its implementation description
 and limitations, and follow its GitHub run or S3 evidence link.
-The catalog provides the selected requirement text. Vault access
-must be authorized separately; an evidence link does not grant
-access.
+The component's successful-deployment links point at run
+42499992586. Its rejection links still point at run 40018585656.
+The catalog provides the selected requirement text.
+Vault access must be authorized separately; an evidence link does
+not grant access.
 
 ### Demonstrated runs
 
-- [Successful post-merge deployment: 40017405490](https://github.com/jgage1194/cgep-capstone/actions/runs/40017405490)
+- [Current deployment: 42499992586](https://github.com/jgage1194/cgep-capstone/actions/runs/42499992586)
+- [Earlier successful deployment: 40017405490](https://github.com/jgage1194/cgep-capstone/actions/runs/40017405490)
 - [Rejected S3 versioning change: 40018585656](https://github.com/jgage1194/cgep-capstone/actions/runs/40018585656)
 
-I verified both evidence chains using scripts/verify-evidence.sh.
-An assessor with authorized vault access can repeat the verification:
+Run 42499992586 is the current configuration. The gate passed, and the
+main apply set reserved concurrency to five, created the alert key, and
+replaced the deployment role's inline IAM policy. It then signed and
+uploaded the bundle. Run 40017405490 is the earlier gated deployment.
+Run 40018585656 is the plan the gate rejected for suspending S3
+versioning.
+
+I verified the earlier evidence chains with scripts/verify-evidence.sh.
+An assessor with authorized vault access can verify the current run:
 
 ```bash
-bash scripts/verify-evidence.sh 40017405490 \
+bash scripts/verify-evidence.sh 42499992586 \
   --vault acme-health-intake-grc-evidence-vault-acf20522 \
   --profile default
 ```
@@ -178,148 +188,173 @@ against the GitHub Actions OIDC issuer, and checks that the bundle
 has an unexpired retention date. Successful verification prints:
 
 ```text
-CHAIN INTACT for run 40017405490
+CHAIN INTACT for run 42499992586
 ```
+
+Substitute an earlier run ID to verify that run. The vault name is the
+same.
 
 This verifies the evidence bundle's integrity, signature, and
 current retention. It does not independently establish that every
 control is effective or that the deployed environment has remained
 unchanged since the run.
 
-## Trade-offs and what I'd do with another sprint
+## Trade-offs
+
+These are choices in the system as deployed. Work I left open is
+in the next section.
 
 ### Custom HIPAA OSCAL catalog
 
-Choosing HIPAA as the primary framework meant creating a custom
-OSCAL catalog for the seven selected safeguards, rather than
-directly importing controls from the available NIST SP 800-53
-catalog.
+Choosing HIPAA as the primary framework meant writing a catalog for
+the seven safeguards this project implements. I kept the requirements
+and descriptions organized around that obligation. NIST SP 800-53,
+SOC 2, and CMMC stay secondary mappings.
 
-This keeps the requirements and implementation descriptions
-organized around Acme Health's primary compliance obligation.
-Supporting NIST SP 800-53, SOC 2, and CMMC references remain
-secondary mappings.
+I maintain the selected text, identifiers, and mappings myself. The
+catalog is a project-authored subset of the HIPAA Security Rule.
+Trestle validation confirms the OSCAL structure. It leaves the
+accuracy of the regulatory text and the mappings as my responsibility.
+A complete catalog, checked against the regulation and labeled with
+its sources, was outside this project's scope. The profile would still
+select only the safeguards this intake system uses.
 
-The tradeoff is maintaining the selected requirement text,
-identifiers, and mappings myself. The catalog is a project-authored
-subset, not an official or complete HIPAA catalog. Trestle validation
-confirms its OSCAL structure; it does not establish the accuracy
-or completeness of its regulatory content or mappings.
+### Reserved concurrency
 
-With more time, I would expand this subset into a complete OSCAL
-catalog of the HIPAA Security Rule, including its standards and
-implementation specifications. I would verify the content against
-the regulation, document its version and sources, and review the
-supporting framework mappings.
+I set reserved concurrency to five after AWS raised the account quota.
+The first apply failed while the quota was 10, because Lambda keeps
+10 executions unreserved. The dead-letter queue and active X-Ray
+tracing are configured with that cap.
 
-The capstone profile would continue selecting only the safeguards
-relevant to this project from that broader catalog.
+The Rego check requires a positive number. A later plan can change
+five to another positive value and still pass. I did not encode the
+specific value five into the policy.
 
-### GAP-06: Reserved concurrency
+### Keeping the HTTP API
 
-I configured an encrypted dead-letter queue, active X-Ray tracing,
-and reserved concurrency of five. The first attempt failed because
-the account quota was 10 and AWS keeps 10 executions unreserved.
-The quota increase has been approved, so the limit of five is set
-and the policy now blocks a plan that removes it.
+I kept the starter's HTTP API. Access logging and throttling are
+configured, and I verified that successful intake requests appear in
+the access logs. AWS WAF cannot attach to an HTTP API directly, so
+GAP-08 stays partial. The policy emits that as a warning, which keeps
+the exception visible and lets a passing plan continue. How I would
+close it is in the next section.
 
-Tracing and asynchronous DLQ delivery still need separate behavior
-tests. The normal intake smoke test does not exercise those features.
+### Repository-scoped gate trust
 
-### GAP-08: WAF protection deferred
-
-I implemented API access logging and throttling and verified that
-successful intake requests appear in the access logs. Throttling
-behavior still needs testing.
-
-I deferred WAF protection. The starter uses an HTTP API, which does
-not support direct AWS WAF association. Keeping that API would require
-CloudFront with WAF and an additional mechanism to reject requests
-that bypass CloudFront. I chose to limit the project's complexity.
-The additional cost has not been evaluated.
-
-With another sprint, I would implement and test both WAF filtering
-and origin-bypass protection. GAP-08 remains partially addressed.
-
-### OIDC and GitHub Actions
-
-The policy gate and deployment workflow use separate AWS roles.
-Pull-request runs use the gate role; pushes to main use the
-deployment role. Both authenticate through GitHub OIDC without
-stored AWS access keys.
-
-The gate role retains the lab's repository-scoped trust pattern.
-This simplifies setup but allows multiple workflow contexts within
-the repository to assume it. Restricting trust further is future
-hardening work.
-
-The evidence verifier checks the GitHub Actions signing issuer
-but currently accepts any certificate identity from that issuer.
-A future improvement would restrict verification to this
-repository's specific workflow identity.
+Pull-request runs use the gate role. Pushes to main use the deployment
+role. Both authenticate with GitHub OIDC and no stored access keys.
+The gate trust matches any ref in this repository, which is the lab
+pattern and lets a pull request plan without a tighter subject rule.
+The evidence check accepts a signature from the GitHub Actions issuer.
+Narrowing the trust and the signer identity is in the next section.
 
 ### Deployment permissions
 
-The main deployment role can apply this configuration. PowerUserAccess
-covers the VPC, data stores, KMS keys, logging, Config, EventBridge,
-and S3 changes. An inline policy lets it read the gate, deployment,
-Lambda, and Config roles, and pass the Lambda and Config roles only
-to those services. It can attach only the managed policy each role
-already uses. PowerUserAccess can be attached only to the deployment
-role. The gate role, which any ref in this repository can assume, can
-receive only ReadOnlyAccess. Inline-policy writes, trust-policy
-updates, and permissions-boundary changes are denied on all four roles.
+PowerUserAccess lets the main role apply VPC, data, KMS, logging,
+Config, EventBridge, and S3 changes. I used that managed policy so the
+next non-IAM resource would not require a new action list. The role
+can also change non-IAM resources this stack does not manage.
+AdministratorAccess is not attached.
 
-PowerUserAccess is account-wide, so the role can change non-IAM
-resources that Terraform does not manage. I accepted that instead of
-maintaining an action list that would miss the next resource.
-AdministratorAccess is not attached. Creating the account's GitHub
-OIDC provider still needs a local apply, because that create action
-cannot be limited to one provider ARN. Changing an inline policy or
-trust policy also needs a local apply. The deployment role cannot
-make those IAM changes.
+IAM stays narrower. The role can read the four stack roles, pass the
+Lambda and Config roles only to those services, and attach only the
+managed policy each role already uses. PowerUserAccess can be attached
+only to the deployment role. The gate role, which any ref in this
+repository can assume, can receive only ReadOnlyAccess. Inline-policy
+writes, trust-policy updates, and permissions-boundary changes are
+denied on all four roles. Run 42499992586 applied that policy. A later
+main-branch job cannot put a broader inline policy onto these roles.
+Creating the GitHub OIDC provider, or changing an inline policy or a
+trust policy, takes a local apply.
 
-### Activity review alerts
+### A short alert list
 
-I enabled AWS Config with the lab pattern: one recorder for supported
-resources, including global resource types, delivering history to an
-encrypted and versioned bucket. An account can keep only one recorder
-in a Region, so a recorder left over from the lab has to be removed
-before this one can be created.
+One Config recorder stores history for supported resources, including
+global types, in an encrypted and versioned bucket. An account can
+keep only one recorder in a Region, so a recorder left from the lab
+has to be removed before this one can be created.
 
-A managed Config rule checks that S3 buckets keep server-side
-encryption. EventBridge publishes two alerts to one SNS topic. The
-first matches read-write CloudTrail calls named StopLogging,
-DeleteTrail, PutBucketEncryption, and DeleteBucketEncryption. The
-second matches a change to NON_COMPLIANT on that Config rule. Those
-event lists are the noise control. The topic is the alert route.
-`alert_email` subscribes an operator; I left it empty so the topic
-does not wait on an unconfirmed address.
+EventBridge publishes two alerts. One matches the read-write CloudTrail
+calls StopLogging, DeleteTrail, PutBucketEncryption, and
+DeleteBucketEncryption. The other matches a NON_COMPLIANT result from
+the S3 server-side-encryption Config rule. I kept that list short so
+ordinary changes do not page. `alert_email` is empty, so the topic
+does not wait on an unconfirmed subscription.
 
-### Checkov high findings
+The topic uses customer-managed key `alias/acme-health-control-alerts`.
+EventBridge cannot publish to a topic encrypted with `alias/aws/sns`,
+because that key policy does not allow `events.amazonaws.com` to
+generate or decrypt data keys. This key allows EventBridge in this
+account, and SNS for this topic, to do those operations.
 
-I enabled point-in-time recovery on the submissions table so intake
-records have a continuous backup.
+### Findings I fixed, and scanners I left out
 
-I replaced the inline Lambda VPC policy with the AWS managed
-`AWSLambdaVPCAccessExecutionRole`. The previous policy allowed
-network-interface actions on every resource. Lambda cannot restrict
-those ENI actions to specific ARNs, and the managed policy is the
-supported way to grant them.
+I enabled point-in-time recovery on the submissions table. I replaced
+the inline Lambda VPC policy with `AWSLambdaVPCAccessExecutionRole`.
+The inline policy allowed network-interface actions on every resource.
+Lambda cannot restrict those actions to specific ARNs, so the managed
+policy is the grant I kept.
 
-I did not configure AWS Signer for the intake function. Code signing
-needs a signing profile and a signed deployment package. Checkov
-`CKV_AWS_272` is skipped on `aws_lambda_function.intake` for that
-reason.
-
-### Additional Scanning
-
-I deferred tfsec scanning after reviewing its findings. The
-current pipeline enforces the custom Rego policies but does not
-run tfsec. Reintroducing a maintained scanner and reviewing its
-findings remains follow-up work.
+Code signing and tfsec are not part of the gate. The gate enforces the
+nine Rego policies through Conftest. Both leftovers are in the next
+section.
 
 ## What I didn't get to
 
-WAF protection, Lambda code signing, and a scheduled drift check
-remain deferred, with the reasons and follow-up work documented above.
+The safeguards, pipeline, and evidence chain above are in place.
+Each item below is still open: what is missing, why I stopped, and
+what would close it.
+
+### WAF, and requests that skip it
+
+GAP-08 has access logging and throttling. WAF is still an open
+warning. The intake API is an HTTP API, so AWS WAF cannot attach to
+it directly. Closing the exception means putting CloudFront in front
+of the API, attaching a web ACL to that distribution, and rejecting
+requests that reach the API without passing CloudFront. I have not
+priced that path. Throttling is configured, and it still needs a test
+that shows excess requests are rejected.
+
+### Lambda code signing
+
+Checkov `CKV_AWS_272` is skipped on `aws_lambda_function.intake`.
+Closing it requires an AWS Signer signing profile and a signed
+deployment package. I left both out of this capstone.
+
+### A scheduled drift check
+
+Config and EventBridge cover a short event list: stopping or deleting
+the trail, changing S3 bucket encryption, and a NON_COMPLIANT result
+on the S3 encryption rule. Nothing on a schedule compares the live
+account with this Terraform configuration. The follow-up is a job that
+runs `terraform plan -detailed-exitcode` and alerts when that plan
+reports drift.
+
+### Who can assume the gate role
+
+Any workflow ref in this repository can assume `cgep-capstone-grc-gate`.
+I kept the lab trust pattern so pull-request runs could plan without
+a tighter subject rule. The follow-up is to limit that role to
+pull-request workflows. Pushes to main would keep using the separate
+deployment role.
+
+### Which workflow may sign evidence
+
+`scripts/verify-evidence.sh` checks that Cosign signed the bundle with
+the GitHub Actions issuer. Any certificate identity from that issuer
+currently satisfies the check. The follow-up is to require the
+certificate identity for this repository's `grc-gate` workflow.
+
+### tfsec
+
+I reviewed tfsec's findings and left the scanner out of the workflow.
+The gate enforces the nine Rego policies through Conftest. The
+follow-up is to add a maintained scanner back and decide which of its
+findings block a merge.
+
+### Behavior the smoke test does not cover
+
+`test/intake.sh` checks that a synthetic POST returns `received`.
+X-Ray traces, delivery to the dead-letter queue, and API throttling
+are configured and still need their own tests. Those tests are the
+remaining proof for Lambda resilience and the API stage settings.
