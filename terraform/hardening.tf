@@ -213,6 +213,14 @@ resource "aws_iam_role_policy" "lambda_dlq" {
 resource "aws_cloudwatch_log_group" "api_access" {
   name              = "/aws/apigateway/${local.name_prefix}-${local.suffix}"
   retention_in_days = 30
+  kms_key_id        = aws_kms_key.logs.arn
+}
+
+# Encrypt the intake function's log group with the same customer-managed key.
+resource "aws_cloudwatch_log_group" "lambda" {
+  name              = "/aws/lambda/${local.name_prefix}-handler-${local.suffix}"
+  retention_in_days = 30
+  kms_key_id        = aws_kms_key.logs.arn
 }
 
 # GRC baseline: Shared Terraform state for local and GitHub Actions runs.

@@ -57,11 +57,12 @@ resource "aws_vpc" "main" {
 }
 
 resource "aws_subnet" "public" {
-  count                   = 2
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.42.${count.index}.0/24"
-  availability_zone       = data.aws_availability_zones.available.names[count.index]
-  map_public_ip_on_launch = true
+  count             = 2
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.42.${count.index}.0/24"
+  availability_zone = data.aws_availability_zones.available.names[count.index]
+  # No instances launch in these subnets. Lambda uses the private subnets.
+  map_public_ip_on_launch = false
 
   tags = { Name = "${local.name_prefix}-public-${count.index}" }
 }
@@ -227,6 +228,10 @@ resource "aws_lambda_function" "intake" {
     target_arn = aws_sqs_queue.intake_dlq.arn
   }
 
+  # Customer-managed key for environment variables. The key policy grants
+  # decrypt to this function's role.
+  kms_key_arn = aws_kms_key.lambda_env.arn
+
   environment {
     variables = {
       INTAKE_TABLE  = aws_dynamodb_table.intake.name
@@ -249,7 +254,8 @@ resource "aws_lambda_function" "intake" {
     aws_vpc_endpoint.s3,
     aws_vpc_endpoint.dynamodb,
     aws_iam_role_policy.lambda_xray,
-    aws_iam_role_policy.lambda_dlq
+    aws_iam_role_policy.lambda_dlq,
+    aws_cloudwatch_log_group.lambda,
   ]
 }
 

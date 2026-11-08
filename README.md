@@ -40,9 +40,11 @@ documented in [WRITEUP.md](WRITEUP.md).
 API Gateway accepts `POST /intake`. Lambda writes submissions to DynamoDB and
 optional attachments to S3. Lambda is associated with private VPC subnets and
 uses S3 and DynamoDB gateway endpoints. Terraform configures customer-managed
-KMS encryption for the intake data stores, S3 TLS enforcement and versioning,
-scoped application IAM permissions, API access logging and throttling, and
-CloudTrail management-event logging.
+KMS encryption for the intake data stores, API and Lambda logs, and the intake
+function's environment variables. Public subnets do not assign a public address
+on launch. Terraform also sets S3 TLS enforcement and versioning, scoped
+application IAM permissions, API access logging and throttling, and CloudTrail
+management-event logging.
 
 AWS Config records supported resource types in this Region, including global
 types, and a managed rule checks that S3 buckets keep server-side encryption.
@@ -54,8 +56,10 @@ so the topic has no subscriber until an operator sets one.
 
 GitHub Actions uses OIDC. Pull requests assume the gate role. Pushes to main
 assume the deployment role, apply the saved plan, and cannot write inline
-policies or trust policies or attach PowerUserAccess to the gate role. Evidence
-is stored in a separate bucket within the same AWS account, with SSE-KMS,
+policies or trust policies or attach PowerUserAccess to the gate role. The
+workflow also runs daily. EventBridge writes a separate daily marker to an
+encrypted log group, so evidence collection is not limited to a code change.
+Evidence is stored in a separate bucket within the same AWS account, with SSE-KMS,
 versioning, blocked public access, and default Governance retention of 30 days.
 The retention period and mode are configurable; check actual object retention
 when verifying a run.
@@ -205,14 +209,16 @@ Configure these GitHub Actions repository variables:
 | `CREATE_GITHUB_OIDC_PROVIDER` | `true` only if this stack created the provider; otherwise unset/false |
 
 The [workflow](.github/workflows/grc-gate.yml) runs on PRs to `main`, pushes to
-`main`, and manual dispatch. Configure a branch ruleset requiring its successful
-check before merging; branch protection is a GitHub setting, not defined by the
-workflow YAML alone.
+`main`, a daily schedule, and manual dispatch. Actions are pinned to commit
+SHAs. Configure a branch ruleset requiring its successful check before merging;
+branch protection is a GitHub setting, not defined by the workflow YAML alone.
 
-1. Run policy unit tests, initialize and validate Terraform, and save a plan.
+1. Validate the OSCAL catalog, profile, resolved catalog, and component.
+   Run Terraform control tests, policy unit tests, then initialize and save a plan.
 2. Evaluate the plan using the nine capstone policy namespaces.
-3. On a successful push run on `main`, apply that same saved plan. PR and manual
-   runs skip apply. The main run generates its own plan; it does not reuse the PR plan.
+3. On a successful push run on `main`, apply that same saved plan. PR, schedule,
+   and manual runs skip apply. The main run generates its own plan; it does not
+   reuse the PR plan.
 4. Bundle available policy results, plan outputs, and apply output; hash and sign
    the bundle with Cosign; upload it and a receipt to the evidence vault.
 5. Preserve GitHub artifacts for 90 days and report PR findings. Evidence steps

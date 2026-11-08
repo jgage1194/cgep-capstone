@@ -299,6 +299,26 @@ Code signing and tfsec are not part of the gate. The gate enforces the
 nine Rego policies through Conftest. Both leftovers are in the next
 section.
 
+## Rubric follow-ups
+
+I pinned every GitHub Action in the gate workflow to a commit SHA.
+Public subnets no longer assign a public address on launch, because no
+instances launch there. API and Lambda log groups use customer-managed
+key `alias/acme-health-logs`. Intake environment variables use
+`alias/acme-health-lambda-env`, and that key policy lets the intake
+role decrypt them.
+
+The workflow validates the OSCAL catalog, profile, resolved catalog,
+and component with Trestle before it plans. `terraform test` checks the
+plan for the public-subnet setting, reserved concurrency, log and
+environment encryption, Object Lock, and the daily EventBridge rule.
+
+Evidence is collected on two schedules. The workflow runs every day at
+12:15 UTC and uploads a signed bundle. It applies only on a push to
+main. EventBridge writes a daily marker to the encrypted log group
+`/aws/events/acme-health-intake-evidence-*`, which is collection
+outside a workflow run. A scheduled drift comparison is still open.
+
 ## What I didn't get to
 
 The safeguards, pipeline, and evidence chain above are in place.
