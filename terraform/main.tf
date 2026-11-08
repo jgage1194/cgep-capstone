@@ -149,7 +149,7 @@ resource "aws_s3_bucket" "uploads" {
 ######################################################################
 # Lambda — the intake handler.
 # GAP-05: not deployed inside the VPC.
-# GAP-06: no reserved concurrency, no DLQ, no X-Ray.
+# GAP-06: reserved concurrency, DLQ, and X-Ray are set in this resource.
 # GAP-07: IAM role has dynamodb:* and s3:* on the resources (over-broad).
 ######################################################################
 
@@ -212,9 +212,9 @@ resource "aws_lambda_function" "intake" {
   source_code_hash = data.archive_file.handler.output_base64sha256
   timeout          = 10
 
-  # GAP-06: Limits simultaneous intake executions to five
-  # to control scaling and pressure on downstream services.
-  # reserved_concurrent_executions = 5
+  # GAP-06 (HIPAA 164.308(a)(1)(ii)(D)): Caps simultaneous intake
+  # executions at five now that the account concurrency quota allows it.
+  reserved_concurrent_executions = 5
 
   # GAP-06: Enables X-Ray tracing for sampled Lambda invocations
   # to support performance and failure investigation.

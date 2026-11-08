@@ -1,6 +1,6 @@
 # METADATA
 # title: Require Lambda tracing and a dead-letter queue
-# description: Blocks missing tracing or DLQ configuration and warns about missing positive reserved concurrency.
+# description: Blocks missing tracing, a dead-letter queue, or positive reserved concurrency.
 # custom:
 #   framework: HIPAA Security Rule
 #   frameworks:
@@ -14,7 +14,7 @@
 #   mapping_note: Supporting safeguards; these checks alone do not satisfy the mapped controls.
 #   gap: GAP-06
 #   severity: medium
-#   remediation: Enable active tracing, configure a DLQ, and set positive reserved concurrency when account quota permits.
+#   remediation: Enable active tracing, configure an SQS DLQ, and set reserved concurrency above zero.
 package compliance.lambda_resilience
 
 import rego.v1
@@ -70,13 +70,13 @@ deny_lambda_dlq contains msg if {
 	)
 }
 
-# WARN: documented exception while the quota increase is pending.
-warn_lambda_concurrency contains msg if {
+# BLOCK: the account quota now allows a positive reserved concurrency limit.
+deny_lambda_concurrency contains msg if {
 	some function in managed_lambdas
 	not has_positive_reserved_concurrency(function)
 
 	msg := sprintf(
-		"GAP-06 | HIPAA 164.308(a)(1)(ii)(D) (supporting safeguard) | OPEN EXCEPTION: %s has no positive reserved concurrency. Account quota increase pending; review this exception when approved.",
+		"GAP-06 | HIPAA 164.308(a)(1)(ii)(D) (supporting safeguard): %s must set reserved concurrency to a positive number.",
 		[function.address],
 	)
 }

@@ -23,7 +23,7 @@ with signed evidence, and OSCAL control documentation.
 | S3 transport | No bucket-policy denial of insecure requests | Explicit non-TLS denial on bucket and object actions |
 | S3 recovery support | No versioning | Versioning enabled; independent backup and restore testing are outside this implementation |
 | Lambda networking | No association with the provisioned workload VPC | Private subnet and security-group association, with S3 and DynamoDB gateway endpoints |
-| Lambda visibility and resilience | No active X-Ray tracing, DLQ, or reserved concurrency | Active tracing and an encrypted SQS DLQ; reserved concurrency remains deferred pending quota approval |
+| Lambda visibility and resilience | No active X-Ray tracing, DLQ, or reserved concurrency | Active tracing, an encrypted SQS DLQ, and reserved concurrency of five |
 | Application permissions | Broad `s3:*` and `dynamodb:*` actions | Enumerated application actions and scoped resources, with documented operational allowances |
 | API protection | No access logging, configured throttling, or WAF | Structured access logs and throttling configured; WAF remains deferred |
 | Change governance | Operator-driven deployment through the Makefile | Required PR policy checks and saved-plan apply on main, currently limited by deployment-role permissions |
@@ -65,7 +65,7 @@ when verifying a run.
 | GAP-08: API logging, throttling, WAF exception | [api_protection.rego](policies/api_protection.rego) | 164.312(b), logging |
 
 These are selected implementations supporting the cited requirements, not a
-claim of complete HIPAA compliance. GAP-06 and GAP-08 remain partially addressed.
+claim of complete HIPAA compliance. GAP-08 remains partially addressed.
 Policy fixtures cover passing, failing, and edge-case inputs.
 
 ## Prerequisites and account setup
@@ -256,7 +256,7 @@ error. It does not establish compliance for unmanaged resources.
 
 ## Limitations and follow-up
 
-- WAF protection and reserved concurrency remain documented exceptions.
+- WAF protection remains a documented exception.
 - Config and EventBridge alert on the named trail and S3-encryption changes.
   A scheduled drift check is still not implemented. Set `alert_email` to
   subscribe an operator; an empty value leaves the SNS topic without a recipient.

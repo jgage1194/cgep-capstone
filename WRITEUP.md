@@ -32,7 +32,7 @@ and remaining limitations.
 | GAP-03 | S3 uploads bucket has no policy denying non-TLS requests (no `aws:SecureTransport` deny).                                                          | `aws_s3_bucket.uploads`             | HIPAA 164.312(e)(1)            | Terraform and Policy | Closed                                                             |
 | GAP-04 | S3 uploads bucket has no versioning. PHI overwrites are unrecoverable.                                                                             | `aws_s3_bucket.uploads`             | HIPAA 164.308(a)(7)            | Terraform and Policy | Closed                                                             |
 | GAP-05 | Lambda runs in the default Lambda environment, not in the VPC the starter provisions.                                                              | `aws_lambda_function.intake`        | HIPAA 164.312(e)(1)            | Terraform and Policy | Closed                                                             |
-| GAP-06 | No reserved concurrency, no DLQ, no X-Ray.                                                                                                         | `aws_lambda_function.intake`        | HIPAA 164.308(a)(1)(ii)(D)     | Terraform and Policy | Partially Closed. No reserved concurrency - Exception documented   |
+| GAP-06 | No reserved concurrency, no DLQ, no X-Ray.                                                                                                         | `aws_lambda_function.intake`        | HIPAA 164.308(a)(1)(ii)(D)     | Terraform and Policy | Closed. Reserved concurrency is 5.                                 |
 | GAP-07 | Lambda IAM role has `dynamodb:*` and `s3:*` on the workload resources. Wildly over-broad.                                                          | `aws_iam_role_policy.lambda_inline` | HIPAA 164.312(a)(1)            | Terraform and Policy | Closed                                                             |
 | GAP-08 | API Gateway has no access logging, no throttling, no WAF.                                                                                          | `aws_apigatewayv2_stage.default`    | HIPAA 164.312(b)               | Terraform and Policy | Partially Closed. No WAF - Exception documented                    |
 
@@ -114,9 +114,9 @@ I made the S3 checks apply to every managed bucket in the plan
 rather than specific bucket names. This allows new buckets to
 receive the same checks without requiring a new policy for each.
 
-Blocking findings stop the deployment path. Deferred items, such
-as WAF protection and reserved concurrency, produce warnings so
-they remain visible without preventing deployment.
+Blocking findings stop the deployment path. The deferred WAF
+exception produces a warning so it stays visible without preventing
+deployment.
 
 The tradeoff is maintaining both the infrastructure configuration
 and the policy logic. Tests help verify that the policies accept
@@ -215,18 +215,16 @@ supporting framework mappings.
 The capstone profile would continue selecting only the safeguards
 relevant to this project from that broader catalog.
 
-### GAP-06: Reserved concurrency pending quota approval
+### GAP-06: Reserved concurrency
 
-I configured an encrypted dead-letter queue and active X-Ray tracing.
-Reserved concurrency remains deferred because the account's regional
-concurrency quota is 10, and AWS requires 10 executions to remain
-unreserved. This prevented deployment of the intended limit of five.
+I configured an encrypted dead-letter queue, active X-Ray tracing,
+and reserved concurrency of five. The first attempt failed because
+the account quota was 10 and AWS keeps 10 executions unreserved.
+The quota increase has been approved, so the limit of five is set
+and the policy now blocks a plan that removes it.
 
-I requested a quota increase on October 23, 2026. After approval,
-I would restore the Terraform setting, apply it, and verify the
-five-execution limit. GAP-06 remains partially addressed. Tracing
-and asynchronous DLQ delivery also require separate behavior tests;
-the normal intake smoke test does not verify those features.
+Tracing and asynchronous DLQ delivery still need separate behavior
+tests. The normal intake smoke test does not exercise those features.
 
 ### GAP-08: WAF protection deferred
 
@@ -318,6 +316,5 @@ findings remains follow-up work.
 
 ## What I didn't get to
 
-WAF protection, reserved concurrency, Lambda code signing, and a
-scheduled drift check remain deferred, with the reasons and follow-up
-work documented above.
+WAF protection, Lambda code signing, and a scheduled drift check
+remain deferred, with the reasons and follow-up work documented above.

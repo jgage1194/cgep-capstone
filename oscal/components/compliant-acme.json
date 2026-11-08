@@ -189,7 +189,7 @@
               {
                 "uuid": "00de7cea-600f-4266-bee1-9815ec54dfbb",
                 "control-id": "hipaa-164.308-a-1-ii-d",
-                "description": "AWS Config records resource configuration, and a managed rule evaluates S3 server-side encryption. EventBridge routes CloudTrail calls that stop or delete a trail or change bucket encryption, and NON_COMPLIANT results from that Config rule, to an SNS topic. CloudTrail, API access logs, X-Ray, and the dead-letter queue remain supporting records. Rego checks the event patterns, SNS targets, Config rule, and recorder status.",
+                "description": "AWS Config records resource configuration, and a managed rule evaluates S3 server-side encryption. EventBridge routes CloudTrail calls that stop or delete a trail or change bucket encryption, and NON_COMPLIANT results from that Config rule, to an SNS topic. The intake function uses active X-Ray tracing, an SQS dead-letter queue, and reserved concurrency of five. Rego checks those Lambda settings, the event patterns, SNS targets, Config rule, and recorder status.",
                 "props": [
                   {"name": "control-title", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "Information system activity review"},
                   {"name": "hipaa-citation", "ns": "https://github.com/jgage1194/cgep-capstone/ns", "value": "45 CFR 164.308(a)(1)(ii)(D)"},
@@ -213,7 +213,7 @@
                     "text": "View successful deployment run"
                   }
                 ],
-                "remarks": "Alerts cover the named trail, encryption, and S3-encryption-rule events. Regular review procedures, a confirmed alert recipient, scheduled drift detection, and broader attack detection are not demonstrated. Reserved concurrency remains deferred pending quota approval; the DLQ applies to asynchronous invocations."
+                "remarks": "Alerts cover the named trail, encryption, and S3-encryption-rule events. Regular review procedures, a confirmed alert recipient, scheduled drift detection, and broader attack detection are not demonstrated. Reserved concurrency is set to five. The DLQ applies to asynchronous invocations."
               },
               {
                 "uuid": "e552d94a-1b4b-4953-94fd-27d44f5b83a5",
@@ -255,7 +255,7 @@
             ]
           }
         ],
-        "remarks": "WAF and reserved concurrency remain deferred. Governance-mode Object Lock preserves evidence for 30 days but can be bypassed with the required permission. The verifier checks checksum, signature, and retention; signer identity, receipt object version, and current deployed state need separate review. The deployment role can apply the managed configuration. PowerUserAccess is account-wide for non-IAM services, and IAM writes are limited to the stack roles."
+        "remarks": "WAF remains deferred. Governance-mode Object Lock preserves evidence for 30 days but can be bypassed with the required permission. The verifier checks checksum, signature, and retention; signer identity, receipt object version, and current deployed state need separate review. The deployment role can apply the managed configuration. PowerUserAccess is account-wide for non-IAM services, and IAM writes are limited to the stack roles."
       }
     ]
   }

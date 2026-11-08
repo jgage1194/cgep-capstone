@@ -27,7 +27,7 @@ test_complete_configuration_passes if {
 
 	count(lambda_resilience.deny_lambda_tracing) == 0 with input as plan
 	count(lambda_resilience.deny_lambda_dlq) == 0 with input as plan
-	count(lambda_resilience.warn_lambda_concurrency) == 0 with input as plan
+	count(lambda_resilience.deny_lambda_concurrency) == 0 with input as plan
 }
 
 # Each invalid tracing setting must trigger the blocking rule.
@@ -77,40 +77,40 @@ test_missing_dlq_field_fails if {
 	count(failures) == 1
 }
 
-# Missing positive concurrency must warn without producing denials.
-test_unreserved_concurrency_warns_only if {
-	every value in [-1, null] {
+# Zero, negative, and null limits do not cap concurrency.
+test_nonpositive_concurrency_fails if {
+	every value in [-1, 0, null] {
 		after := object.union(settings, {
 			"reserved_concurrent_executions": value,
 		})
 		plan := resilience_plan(after)
 
-		warnings := lambda_resilience.warn_lambda_concurrency with input as plan
-		count(warnings) == 1
+		failures := lambda_resilience.deny_lambda_concurrency with input as plan
+		count(failures) == 1
 
-		some msg in warnings
-		contains(msg, "OPEN EXCEPTION")
+		some msg in failures
+		contains(msg, "positive number")
 
 		count(lambda_resilience.deny_lambda_tracing) == 0 with input as plan
 		count(lambda_resilience.deny_lambda_dlq) == 0 with input as plan
 	}
 }
 
-test_missing_concurrency_warns_only if {
+test_missing_concurrency_fails if {
 	plan := resilience_plan(object.remove(settings, {"reserved_concurrent_executions"}))
 
-	count(lambda_resilience.warn_lambda_concurrency) == 1 with input as plan
+	count(lambda_resilience.deny_lambda_concurrency) == 1 with input as plan
 	count(lambda_resilience.deny_lambda_tracing) == 0 with input as plan
 	count(lambda_resilience.deny_lambda_dlq) == 0 with input as plan
 }
 
-test_positive_concurrency_clears_warning if {
+test_positive_concurrency_passes if {
 	every value in [1, 5, 10] {
 		plan := resilience_plan(object.union(settings, {
 			"reserved_concurrent_executions": value,
 		}))
 
-		count(lambda_resilience.warn_lambda_concurrency) == 0 with input as plan
+		count(lambda_resilience.deny_lambda_concurrency) == 0 with input as plan
 	}
 }
 
@@ -119,7 +119,7 @@ test_all_settings_missing_reports_each_issue if {
 
 	count(lambda_resilience.deny_lambda_tracing) == 1 with input as plan
 	count(lambda_resilience.deny_lambda_dlq) == 1 with input as plan
-	count(lambda_resilience.warn_lambda_concurrency) == 1 with input as plan
+	count(lambda_resilience.deny_lambda_concurrency) == 1 with input as plan
 }
 
 test_module_lambda_passes if {
@@ -130,7 +130,7 @@ test_module_lambda_passes if {
 
 	count(lambda_resilience.deny_lambda_tracing) == 0 with input as plan
 	count(lambda_resilience.deny_lambda_dlq) == 0 with input as plan
-	count(lambda_resilience.warn_lambda_concurrency) == 0 with input as plan
+	count(lambda_resilience.deny_lambda_concurrency) == 0 with input as plan
 }
 
 test_second_unprotected_lambda_fails if {
@@ -143,7 +143,7 @@ test_second_unprotected_lambda_fails if {
 
 	count(lambda_resilience.deny_lambda_tracing) == 1 with input as plan
 	count(lambda_resilience.deny_lambda_dlq) == 1 with input as plan
-	count(lambda_resilience.warn_lambda_concurrency) == 1 with input as plan
+	count(lambda_resilience.deny_lambda_concurrency) == 1 with input as plan
 }
 
 test_deleted_lambda_passes if {
@@ -157,7 +157,7 @@ test_deleted_lambda_passes if {
 
 	count(lambda_resilience.deny_lambda_tracing) == 0 with input as plan
 	count(lambda_resilience.deny_lambda_dlq) == 0 with input as plan
-	count(lambda_resilience.warn_lambda_concurrency) == 0 with input as plan
+	count(lambda_resilience.deny_lambda_concurrency) == 0 with input as plan
 }
 
 test_lambda_data_source_passes if {
@@ -166,7 +166,7 @@ test_lambda_data_source_passes if {
 
 	count(lambda_resilience.deny_lambda_tracing) == 0 with input as plan
 	count(lambda_resilience.deny_lambda_dlq) == 0 with input as plan
-	count(lambda_resilience.warn_lambda_concurrency) == 0 with input as plan
+	count(lambda_resilience.deny_lambda_concurrency) == 0 with input as plan
 }
 
 test_no_lambdas_passes if {
@@ -174,5 +174,5 @@ test_no_lambdas_passes if {
 
 	count(lambda_resilience.deny_lambda_tracing) == 0 with input as plan
 	count(lambda_resilience.deny_lambda_dlq) == 0 with input as plan
-	count(lambda_resilience.warn_lambda_concurrency) == 0 with input as plan
+	count(lambda_resilience.deny_lambda_concurrency) == 0 with input as plan
 }
