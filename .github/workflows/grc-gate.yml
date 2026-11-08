@@ -87,7 +87,9 @@ jobs:
       - name: Terraform control tests
         id: terraform_test
         working-directory: ${{ env.TF_WORKING_DIR }}
-        run: terraform test
+        run: |
+          terraform init -backend=false
+          terraform test
 
       - name: Run policy unit tests
         id: policy_tests
