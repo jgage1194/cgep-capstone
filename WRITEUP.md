@@ -67,10 +67,10 @@ Required checks prevent merging changes that fail the policy gate.
 After merge, the workflow evaluates a fresh saved plan before
 applying that same plan.
 
-The deployment role applies every change in the saved Terraform
-plan after the policy gate passes. PowerUserAccess covers the
-non-IAM resources. The inline IAM policy covers the roles this
-stack manages.
+The deployment role applies the non-IAM changes in the saved Terraform
+plan after the policy gate passes. PowerUserAccess covers those
+resources. Inline IAM policies and trust policies are outside that
+role, so a main-branch job cannot expand them.
 
 I accepted automated deployment without an additional manual
 approval step. Passing policy checks provides confidence in the
@@ -262,17 +262,22 @@ repository's specific workflow identity.
 
 The main deployment role can apply this configuration. PowerUserAccess
 covers the VPC, data stores, KMS keys, logging, Config, EventBridge,
-and S3 changes. An inline policy covers IAM for the gate role, the
-deployment role, the Lambda role, and the Config role, including
-passing those roles only to Lambda and Config. Managed-policy
-attachment is limited to the five policies this stack uses.
+and S3 changes. An inline policy lets it read the gate, deployment,
+Lambda, and Config roles, and pass the Lambda and Config roles only
+to those services. It can attach only the managed policy each role
+already uses. PowerUserAccess can be attached only to the deployment
+role. The gate role, which any ref in this repository can assume, can
+receive only ReadOnlyAccess. Inline-policy writes, trust-policy
+updates, and permissions-boundary changes are denied on all four roles.
 
 PowerUserAccess is account-wide, so the role can change non-IAM
 resources that Terraform does not manage. I accepted that instead of
 maintaining an action list that would miss the next resource.
 AdministratorAccess is not attached. Creating the account's GitHub
 OIDC provider still needs a local apply, because that create action
-cannot be limited to one provider ARN.
+cannot be limited to one provider ARN. Changing an inline policy or
+trust policy also needs a local apply. The deployment role cannot
+make those IAM changes.
 
 ### Activity review alerts
 

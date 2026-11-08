@@ -250,12 +250,12 @@
                     "text": "View rejected versioning change"
                   }
                 ],
-                "remarks": "CM-3 is a project-authored supporting mapping for the configuration-change safeguards; it is not a claim of equivalence with HIPAA risk management. Organization-wide risk analysis, risk treatment decisions, independent approval, and effectiveness review remain outside this demonstration. The deployment role can apply this configuration. PowerUserAccess covers non-IAM services and is account-wide. IAM writes are limited to the stack roles and the GitHub OIDC provider."
+                "remarks": "CM-3 is a project-authored supporting mapping for the configuration-change safeguards; it is not a claim of equivalence with HIPAA risk management. Organization-wide risk analysis, risk treatment decisions, independent approval, and effectiveness review remain outside this demonstration. The deployment role can apply this configuration. PowerUserAccess covers non-IAM services and is account-wide. It can attach only the managed policy each stack role already uses, and only ReadOnlyAccess on the pull-request gate role. It cannot write inline policies or trust policies on the stack roles."
               }
             ]
           }
         ],
-        "remarks": "WAF remains deferred. Governance-mode Object Lock preserves evidence for 30 days but can be bypassed with the required permission. The verifier checks checksum, signature, and retention; signer identity, receipt object version, and current deployed state need separate review. The deployment role can apply the managed configuration. PowerUserAccess is account-wide for non-IAM services, and IAM writes are limited to the stack roles."
+        "remarks": "WAF remains deferred. Governance-mode Object Lock preserves evidence for 30 days but can be bypassed with the required permission. The verifier checks checksum, signature, and retention; signer identity, receipt object version, and current deployed state need separate review. The deployment role can apply the managed configuration. PowerUserAccess is account-wide for non-IAM services. It cannot write inline or trust policies on the stack roles, and it can attach PowerUserAccess only to itself."
       }
     ]
   }

@@ -145,7 +145,8 @@ resource "aws_iam_role_policy_attachment" "deploy_readonly" {
 }
 
 # Non-IAM changes for this stack: VPC, data stores, KMS, logging, Config,
-# EventBridge, and the evidence bucket. IAM writes stay in deploy_iam.
+# EventBridge, and the evidence bucket. Scoped IAM reads and managed-policy
+# attachment stay in deploy_iam.
 resource "aws_iam_role_policy_attachment" "deploy_power_user" {
   role       = aws_iam_role.grc_deploy.name
   policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
@@ -186,9 +187,11 @@ resource "aws_iam_role_policy" "deploy_evidence" {
   policy = aws_iam_role_policy.grc_gate_evidence.policy
 }
 
-# IAM for the roles and provider this stack manages. PowerUserAccess does not
-# include IAM writes. Actions stay enumerated and resources stay on these ARNs
-# so the least-privilege Rego check can read the document.
+# PowerUserAccess excludes IAM. This policy adds only role reads and the
+# managed-policy attachment each role already has. Inline-policy and trust
+# writes are denied: IAM cannot limit those calls to a specific document, the
+# deploy role could grant itself iam:*, and the gate role is assumable from
+# any ref. PowerUserAccess stays on the main-only deploy role.
 resource "aws_iam_role_policy" "deploy_iam" {
   name = "capstone-workload-iam"
   role = aws_iam_role.grc_deploy.id
@@ -197,22 +200,17 @@ resource "aws_iam_role_policy" "deploy_iam" {
     Version = "2012-10-17"
     Statement = [
       {
-        Sid    = "ManageStackRoles"
+        Sid    = "ReadAndTagStackRoles"
         Effect = "Allow"
         Action = [
-          "iam:CreateRole",
-          "iam:DeleteRole",
           "iam:GetRole",
-          "iam:UpdateRole",
-          "iam:UpdateAssumeRolePolicy",
-          "iam:TagRole",
-          "iam:UntagRole",
+          "iam:GetRolePolicy",
           "iam:ListRolePolicies",
           "iam:ListAttachedRolePolicies",
           "iam:ListInstanceProfilesForRole",
-          "iam:PutRolePolicy",
-          "iam:GetRolePolicy",
-          "iam:DeleteRolePolicy",
+          "iam:TagRole",
+          "iam:UntagRole",
+          "iam:UpdateRole",
         ]
         Resource = [
           aws_iam_role.grc_gate.arn,
@@ -222,7 +220,7 @@ resource "aws_iam_role_policy" "deploy_iam" {
         ]
       },
       {
-        Sid    = "AttachKnownPolicies"
+        Sid    = "AttachReadOnlyToPipelineRoles"
         Effect = "Allow"
         Action = [
           "iam:AttachRolePolicy",
@@ -231,18 +229,92 @@ resource "aws_iam_role_policy" "deploy_iam" {
         Resource = [
           aws_iam_role.grc_gate.arn,
           aws_iam_role.grc_deploy.arn,
+        ]
+        Condition = {
+          ArnEquals = {
+            "iam:PolicyARN" = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+          }
+        }
+      },
+      {
+        Sid    = "AttachPowerUserToDeployRole"
+        Effect = "Allow"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+        ]
+        Resource = aws_iam_role.grc_deploy.arn
+        Condition = {
+          ArnEquals = {
+            "iam:PolicyARN" = "arn:aws:iam::aws:policy/PowerUserAccess"
+          }
+        }
+      },
+      {
+        Sid    = "AttachLambdaExecution"
+        Effect = "Allow"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+        ]
+        Resource = aws_iam_role.lambda.arn
+        Condition = {
+          ArnEquals = {
+            "iam:PolicyARN" = [
+              "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+              "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+            ]
+          }
+        }
+      },
+      {
+        Sid    = "AttachConfigService"
+        Effect = "Allow"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+        ]
+        Resource = aws_iam_role.config.arn
+        Condition = {
+          ArnEquals = {
+            "iam:PolicyARN" = "arn:aws:iam::aws:policy/service-role/AWS_ConfigRole"
+          }
+        }
+      },
+      {
+        Sid    = "DenyInlineAndTrustEdits"
+        Effect = "Deny"
+        Action = [
+          "iam:CreateRole",
+          "iam:DeleteRole",
+          "iam:UpdateAssumeRolePolicy",
+          "iam:PutRolePolicy",
+          "iam:DeleteRolePolicy",
+          "iam:PutRolePermissionsBoundary",
+          "iam:DeleteRolePermissionsBoundary",
+        ]
+        Resource = [
+          aws_iam_role.grc_gate.arn,
+          aws_iam_role.grc_deploy.arn,
+          aws_iam_role.lambda.arn,
+          aws_iam_role.config.arn,
+        ]
+      },
+      {
+        Sid    = "DenyPowerUserBeyondDeployRole"
+        Effect = "Deny"
+        Action = [
+          "iam:AttachRolePolicy",
+          "iam:DetachRolePolicy",
+        ]
+        Resource = [
+          aws_iam_role.grc_gate.arn,
           aws_iam_role.lambda.arn,
           aws_iam_role.config.arn,
         ]
         Condition = {
           ArnEquals = {
-            "iam:PolicyARN" = [
-              "arn:aws:iam::aws:policy/ReadOnlyAccess",
-              "arn:aws:iam::aws:policy/PowerUserAccess",
-              "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
-              "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
-              "arn:aws:iam::aws:policy/service-role/AWS_ConfigRole",
-            ]
+            "iam:PolicyARN" = "arn:aws:iam::aws:policy/PowerUserAccess"
           }
         }
       },

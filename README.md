@@ -210,8 +210,10 @@ workflow YAML alone.
    are attempted even after earlier failures. Required evidence steps must succeed.
 
 The deployment role can apply the stack: PowerUserAccess for the non-IAM
-resources, and an inline policy for the IAM roles and GitHub OIDC provider
-this configuration manages. Advisory warnings do not block apply.
+resources, and an inline policy that reads the stack roles and attaches
+only the managed policy each role already uses. It cannot write inline
+policies or trust policies, and it cannot attach PowerUserAccess to the
+pull-request gate role. Advisory warnings do not block apply.
 The workflow currently uses Conftest; tfsec is deferred.
 
 ## Assessor walkthrough
@@ -262,7 +264,8 @@ error. It does not establish compliance for unmanaged resources.
   subscribe an operator; an empty value leaves the SNS topic without a recipient.
 - tfsec is disabled; the rubric's other scanners have not yet been verified.
 - The deployment role can change non-IAM resources outside this stack because
-  PowerUserAccess is account-wide. IAM writes are limited to the stack roles.
+  PowerUserAccess is account-wide. It cannot write inline or trust policies
+  on the stack roles, and it can attach PowerUserAccess only to itself.
 - See [WRITEUP.md](WRITEUP.md) for behavior tests still outstanding and design tradeoffs.
 
 ## Repository layout
